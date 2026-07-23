@@ -15,6 +15,7 @@ class Call(Base):
 
     id = Column(Integer, primary_key=True, index=True)
     agent_id = Column(Integer, ForeignKey("agents.id"))
+    user_id = Column(Integer, ForeignKey("users.id"), nullable=True)  # who placed the call — used to resolve their telephony Integration credentials
     user_phone = Column(String)
     status = Column(String, default=CallStatus.QUEUED.value)
     recording_url = Column(String, nullable=True)

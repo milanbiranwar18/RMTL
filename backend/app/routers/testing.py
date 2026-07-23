@@ -1,37 +1,20 @@
 from fastapi import APIRouter, HTTPException, Depends, UploadFile, File, Form
 from pydantic import BaseModel
 from typing import List, Optional, Dict, Any
-from app.services.workflow_engine import WorkflowEngine
-from app.services.voice_service import VoiceService
 from app.database import get_db
 from sqlalchemy.orm import Session
 from app.models.workflow import Workflow
 from app.models.agent import Agent
+from app.services import voice_pipeline
+from app.services.voice_pipeline import workflow_engine, resolve_agent_language
 import logging
 import json
-from app.config import settings
 
 router = APIRouter(
     prefix="/test",
     tags=["testing"],
 )
 logger = logging.getLogger(__name__)
-workflow_engine = WorkflowEngine()
-voice_service = VoiceService()
-
-LANGUAGE_NAMES = {
-    "hi-IN": "Hindi",
-    "en-IN": "English (Indian accent)",
-    "ta-IN": "Tamil",
-    "te-IN": "Telugu",
-    "kn-IN": "Kannada",
-    "ml-IN": "Malayalam",
-    "mr-IN": "Marathi",
-    "gu-IN": "Gujarati",
-    "bn-IN": "Bengali",
-    "or-IN": "Odia",
-    "pa-IN": "Punjabi",
-}
 
 class TestRequest(BaseModel):
     workflow_id: int
@@ -58,10 +41,9 @@ def test_workflow(request: TestRequest, db: Session = Depends(get_db)):
         if workflow.agent_id:
             agent = db.query(Agent).filter(Agent.id == workflow.agent_id).first()
 
-        target_language = None
-        if agent and agent.voice_provider == 'sarvam':
-            lang_code = agent.sarvam_language or 'hi-IN'
-            target_language = LANGUAGE_NAMES.get(lang_code, 'Hindi')
+        # Language is agent-wide now — the LLM should answer in the agent's configured
+        # language regardless of which voice provider is doing STT/TTS.
+        target_language, _ = resolve_agent_language(agent)
 
         workflow_data = {
             "nodes": workflow.nodes,
@@ -73,7 +55,8 @@ def test_workflow(request: TestRequest, db: Session = Depends(get_db)):
             workflow_data,
             request.user_input,
             request.conversation_history,
-            request.current_node_id
+            request.current_node_id,
+            agent
         )
 
         if isinstance(result, dict):
@@ -110,47 +93,19 @@ async def test_voice_workflow(
         if workflow.agent_id:
             agent = db.query(Agent).filter(Agent.id == workflow.agent_id).first()
 
-        use_sarvam = agent and agent.voice_provider == 'sarvam'
-        sarvam_api_key = agent.sarvam_api_key if agent else None
-        sarvam_language = agent.sarvam_language if agent else 'hi-IN'
-        sarvam_speaker = agent.voice_name if agent else 'meera'
+        # Language is agent-wide now — applies to the LLM's reply language regardless of
+        # which voice provider (Sarvam/ElevenLabs/Whisper) is doing STT/TTS for this agent.
+        target_language, _ = resolve_agent_language(agent)
 
-        target_language = None
-        if use_sarvam:
-            target_language = LANGUAGE_NAMES.get(sarvam_language, 'Hindi')
-
-        # 2. Transcribe Audio — use Sarvam STT as PRIMARY
+        # 2. Transcribe Audio (Sarvam primary if the agent uses it, Whisper fallback — see voice_pipeline.py)
         audio_content = await audio.read()
-        logger.info(f"Audio: {len(audio_content)} bytes | provider={'sarvam' if use_sarvam else 'whisper'}")
+        logger.info(f"Audio: {len(audio_content)} bytes | provider={agent.voice_provider if agent else 'whisper'}")
 
         if len(audio_content) < 100:
             # Empty/silent audio → initial greeting trigger
             transcription = ""
         else:
-            transcription = ""
-            sarvam_failed = False
-            # Resolve STT API key: agent's own → platform key → None
-            stt_key = sarvam_api_key or settings.SARVAM_API_KEY
-            if stt_key:
-                try:
-                    transcription = await voice_service.transcribe_audio_sarvam_custom(
-                        audio_content, sarvam_language or "hi-IN", api_key=stt_key
-                    )
-                    logger.info(f"Sarvam STT transcription: '{transcription}'")
-                except Exception as stt_err:
-                    logger.warning(f"Sarvam STT failed: {stt_err} — skipping")
-                    sarvam_failed = True
-            else:
-                sarvam_failed = True
-                    
-            # If Sarvam failed (invalid key) or we didn't have a key, try OpenAI Whisper as last resort
-            if sarvam_failed:
-                try:
-                    logger.info("Falling back to Whisper for STT")
-                    transcription = await voice_service.transcribe_audio(audio_content)
-                except Exception as w_err:
-                    logger.error(f"Whisper STT also failed: {w_err}")
-                    transcription = ""
+            transcription = await voice_pipeline.transcribe(agent, audio_content)
 
         logger.info(f"TRANSCRIPTION: '{transcription}'")
 
@@ -165,7 +120,8 @@ async def test_voice_workflow(
             workflow_data,
             transcription,
             history,
-            current_node_id
+            current_node_id,
+            agent
         )
 
         response_text = ""
@@ -176,21 +132,8 @@ async def test_voice_workflow(
         else:
             response_text = str(result)
 
-        # 4. Generate Audio — use Sarvam TTS as PRIMARY
-        tts_key = sarvam_api_key or settings.SARVAM_API_KEY
-        if tts_key:
-            try:
-                audio_base64 = await voice_service.generate_audio_sarvam_custom(
-                    response_text,
-                    sarvam_language or "hi-IN",
-                    sarvam_speaker or "meera",
-                    api_key=tts_key
-                )
-            except Exception as tts_err:
-                logger.warning(f"Sarvam TTS failed: {tts_err} — falling back to default TTS")
-                audio_base64 = await voice_service.generate_audio(response_text)
-        else:
-            audio_base64 = await voice_service.generate_audio(response_text)
+        # 4. Generate Audio (Sarvam primary if the agent uses it, default TTS fallback)
+        audio_base64 = await voice_pipeline.synthesize(agent, response_text)
 
         return {
             "transcription": transcription,

@@ -1,53 +1,47 @@
-from fastapi import APIRouter, HTTPException
-from pydantic import BaseModel
+from fastapi import APIRouter, Depends, HTTPException
+from sqlalchemy.orm import Session
+
+from app.database import get_db
+from app.dependencies import get_current_user
+from app.models.user import User
+from app.schemas.user import AuthResponse, LoginRequest, RegisterRequest
+from app.services import security_service
 
 router = APIRouter(prefix="/auth", tags=["auth"])
 
-class LoginRequest(BaseModel):
-    email: str
-    password: str
 
-class RegisterRequest(BaseModel):
-    name: str
-    email: str
-    password: str
-
-# In-memory mock database for now
-_mock_users = {}
-
-@router.post("/register")
-def register(req: RegisterRequest):
-    if req.email in _mock_users:
+@router.post("/register", response_model=AuthResponse)
+def register(req: RegisterRequest, db: Session = Depends(get_db)):
+    existing = db.query(User).filter(User.email == req.email).first()
+    if existing:
         raise HTTPException(status_code=400, detail="Email already registered")
-    
-    # Store plain for mock purposes
-    _mock_users[req.email] = {
-        "name": req.name,
-        "email": req.email,
-        "password": req.password
-    }
-    
-    return {
-        "token": f"mock-token-{req.email}",
-        "user": {
-            "name": req.name,
-            "email": req.email
-        }
-    }
 
-@router.post("/login")
-def login(req: LoginRequest):
-    user = _mock_users.get(req.email)
-    
-    # Temporary fallback: if email not found, let them in anyway just for demo testing, 
-    # but use the provided email. Or we can force registration. Lets force registration.
-    if not user or user["password"] != req.password:
+    if len(req.password) < 6:
+        raise HTTPException(status_code=400, detail="Password must be at least 6 characters")
+
+    user = User(
+        name=req.name,
+        email=req.email,
+        hashed_password=security_service.hash_password(req.password),
+    )
+    db.add(user)
+    db.commit()
+    db.refresh(user)
+
+    token = security_service.create_access_token({"sub": str(user.id)})
+    return {"token": token, "user": {"name": user.name, "email": user.email}}
+
+
+@router.post("/login", response_model=AuthResponse)
+def login(req: LoginRequest, db: Session = Depends(get_db)):
+    user = db.query(User).filter(User.email == req.email).first()
+    if not user or not security_service.verify_password(req.password, user.hashed_password):
         raise HTTPException(status_code=401, detail="Invalid email or password")
-        
-    return {
-        "token": f"mock-token-{req.email}",
-        "user": {
-            "name": user["name"],
-            "email": user["email"]
-        }
-    }
+
+    token = security_service.create_access_token({"sub": str(user.id)})
+    return {"token": token, "user": {"name": user.name, "email": user.email}}
+
+
+@router.get("/me")
+def me(current_user: User = Depends(get_current_user)):
+    return {"id": current_user.id, "name": current_user.name, "email": current_user.email}

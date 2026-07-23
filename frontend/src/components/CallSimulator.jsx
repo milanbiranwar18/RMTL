@@ -31,15 +31,23 @@ const CallSimulator = ({ agents }) => {
     };
 
     return (
-        <div className="bg-card p-6 rounded-lg border border-border h-fit">
-            <h2 className="text-xl font-semibold mb-4">Call Simulator</h2>
+        <div className="bg-card p-6 rounded-xl border border-border h-fit">
+            <div className="flex items-center gap-2 mb-5">
+                <span className="w-9 h-9 rounded-lg bg-green-500/10 text-green-600 dark:text-green-400 flex items-center justify-center">
+                    <Phone className="w-4 h-4" />
+                </span>
+                <div>
+                    <h2 className="text-base font-semibold leading-tight">Call Simulator</h2>
+                    <p className="text-xs text-muted-foreground">Test an agent with a live outbound call</p>
+                </div>
+            </div>
 
             {!activeCall ? (
                 <div className="space-y-4">
                     <div>
-                        <label className="block text-sm font-medium mb-1">Select Agent</label>
+                        <label className="block text-xs font-medium text-muted-foreground mb-1.5">Select Agent</label>
                         <select
-                            className="w-full p-2 rounded-md border border-input bg-background"
+                            className="w-full p-2 text-sm rounded-md border border-input bg-background outline-none focus:ring-2 focus:ring-ring"
                             value={selectedAgent}
                             onChange={(e) => setSelectedAgent(e.target.value)}
                         >
@@ -53,11 +61,11 @@ const CallSimulator = ({ agents }) => {
                     </div>
 
                     <div>
-                        <label className="block text-sm font-medium mb-1">Phone Number</label>
+                        <label className="block text-xs font-medium text-muted-foreground mb-1.5">Phone Number</label>
                         <input
                             type="tel"
                             placeholder="+1234567890"
-                            className="w-full p-2 rounded-md border border-input bg-background"
+                            className="w-full p-2 text-sm rounded-md border border-input bg-background outline-none focus:ring-2 focus:ring-ring"
                             value={phoneNumber}
                             onChange={(e) => setPhoneNumber(e.target.value)}
                         />
@@ -66,21 +74,21 @@ const CallSimulator = ({ agents }) => {
                     <button
                         onClick={startCall}
                         disabled={loading || !selectedAgent || !phoneNumber}
-                        className="w-full bg-green-600 text-white py-2 rounded-md hover:bg-green-700 disabled:opacity-50 flex items-center justify-center gap-2"
+                        className="w-full bg-green-600 text-white py-2.5 rounded-md hover:bg-green-700 disabled:opacity-50 flex items-center justify-center gap-2 text-sm font-medium transition-colors"
                     >
                         {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Phone className="w-4 h-4" />}
                         Start Call
                     </button>
                 </div>
             ) : (
-                <div className="text-center space-y-6 py-8">
-                    <div className="w-24 h-24 bg-green-100 rounded-full flex items-center justify-center mx-auto animate-pulse">
-                        <Phone className="w-12 h-12 text-green-600" />
+                <div className="text-center space-y-6 py-4">
+                    <div className="w-24 h-24 bg-green-500/10 rounded-full flex items-center justify-center mx-auto animate-pulse">
+                        <Phone className="w-12 h-12 text-green-600 dark:text-green-400" />
                     </div>
 
                     <div>
                         <h3 className="text-lg font-semibold">Call in Progress</h3>
-                        <p className="text-muted-foreground">Connected to {phoneNumber}</p>
+                        <p className="text-muted-foreground text-sm">Connected to {phoneNumber}</p>
                     </div>
 
                     <div className="p-4 bg-muted rounded-md text-left text-sm font-mono h-32 overflow-y-auto">
@@ -89,7 +97,7 @@ const CallSimulator = ({ agents }) => {
 
                     <button
                         onClick={endCall}
-                        className="w-full bg-red-600 text-white py-2 rounded-md hover:bg-red-700 flex items-center justify-center gap-2"
+                        className="w-full bg-red-600 text-white py-2.5 rounded-md hover:bg-red-700 flex items-center justify-center gap-2 text-sm font-medium transition-colors"
                     >
                         <PhoneOff className="w-4 h-4" />
                         End Call

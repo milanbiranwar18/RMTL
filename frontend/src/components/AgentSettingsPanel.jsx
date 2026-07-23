@@ -1,5 +1,7 @@
-import React, { useState } from 'react';
-import { X, Settings, Key, Globe } from 'lucide-react';
+import React, { useState, useEffect } from 'react';
+import { X, Settings, Globe } from 'lucide-react';
+import client from '../api/client';
+import { LLM_PROVIDERS, TTS_PROVIDERS, STT_PROVIDERS, TELEPHONY_PROVIDERS, findProvider } from '../lib/voiceProviders';
 
 // Reusable "Platform Key vs Own Key" toggle
 const KeyToggle = ({ label, ownKey, onChange, placeholder }) => {
@@ -37,115 +39,72 @@ const KeyToggle = ({ label, ownKey, onChange, placeholder }) => {
             )}
             {!useOwn && (
                 <p className="text-[10px] text-green-500 flex items-center gap-1">
-                    <Globe className="w-2.5 h-2.5" /> Using RMVox platform key
+                    <Globe className="w-2.5 h-2.5" /> Using saved Integrations key
                 </p>
             )}
         </div>
     );
 };
 
+const KEY_PLACEHOLDER = {
+    openai_api_key: 'sk-proj-...',
+    anthropic_api_key: 'sk-ant-...',
+    gemini_api_key: 'AIza...',
+    elevenlabs_api_key: 'sk_...',
+    cartesia_api_key: 'Your Cartesia API key...',
+    assemblyai_api_key: 'Your AssemblyAI API key...',
+    deepgram_api_key: 'Your Deepgram API key...',
+    sarvam_api_key: 'Your Sarvam API key...',
+};
+
 const AgentSettingsPanel = ({ agent, onUpdate, onClose }) => {
     const [settings, setSettings] = useState({
         llm_provider: agent?.llm_provider || 'gpt',
         llm_model: agent?.llm_model || 'gpt-4o',
-        language: agent?.language || 'en',
+        language: agent?.language || 'en-US',
         voice_provider: agent?.voice_provider || 'elevenlabs',
         voice_name: agent?.voice_name || 'Rachel',
         voice_id: agent?.voice_id || '',
-        // API keys — empty string = use platform key, any other value = use own key
+        stt_provider: agent?.stt_provider || 'whisper',
+        telephony_provider: agent?.telephony_provider || 'twilio',
+        // API keys — empty string = use saved Integrations key, any other value = use own key
         elevenlabs_api_key: agent?.elevenlabs_api_key || '',
         sarvam_api_key: agent?.sarvam_api_key || '',
-        sarvam_language: agent?.sarvam_language || 'hi-IN',
         openai_api_key: agent?.openai_api_key || '',
         gemini_api_key: agent?.gemini_api_key || '',
+        anthropic_api_key: agent?.anthropic_api_key || '',
+        cartesia_api_key: agent?.cartesia_api_key || '',
+        assemblyai_api_key: agent?.assemblyai_api_key || '',
+        deepgram_api_key: agent?.deepgram_api_key || '',
     });
+    const [languageGroups, setLanguageGroups] = useState([]);
 
-    const llmProviders = [
-        { id: 'gpt', name: 'OpenAI GPT' },
-        { id: 'gemini', name: 'Google Gemini (Free Tier)' },
-        { id: 'claude', name: 'Anthropic Claude' },
-    ];
+    useEffect(() => {
+        client
+            .get('/agents/languages')
+            .then((res) => setLanguageGroups(res.data))
+            .catch(() => {});
+    }, []);
 
-    const llmModels = {
-        gpt: [
-            { id: 'gpt-4o', name: 'GPT-4o (Latest)' },
-            { id: 'gpt-4-turbo', name: 'GPT-4 Turbo' },
-            { id: 'gpt-4', name: 'GPT-4' },
-            { id: 'gpt-3.5-turbo', name: 'GPT-3.5 Turbo' },
-        ],
-        gemini: [
-            { id: 'gemini-1.5-flash', name: 'Gemini 1.5 Flash (Fast)' },
-            { id: 'gemini-1.5-pro', name: 'Gemini 1.5 Pro' },
-            { id: 'gemini-pro', name: 'Gemini Pro' },
-        ],
-        claude: [
-            { id: 'claude-3-5-sonnet-20241022', name: 'Claude 3.5 Sonnet' },
-            { id: 'claude-3-opus-20240229', name: 'Claude 3 Opus' },
-            { id: 'claude-3-haiku-20240307', name: 'Claude 3 Haiku (Fast)' },
-        ],
-    };
-
-    const elevenLabsVoices = [
-        { id: 'Rachel', name: 'Rachel (Female, American)' },
-        { id: 'Bella', name: 'Bella (Female, American)' },
-        { id: 'Emily', name: 'Emily (Female, American)' },
-        { id: 'Grace', name: 'Grace (Female, American Southern)' },
-        { id: 'Charlotte', name: 'Charlotte (Female, British)' },
-        { id: 'Alice', name: 'Alice (Female, British)' },
-        { id: 'Adam', name: 'Adam (Male, American)' },
-        { id: 'Antoni', name: 'Antoni (Male, American)' },
-        { id: 'Daniel', name: 'Daniel (Male, British)' },
-        { id: 'Josh', name: 'Josh (Male, American)' },
-        { id: 'Sam', name: 'Sam (Male, American)' },
-    ];
-
-    const sarvamVoices = [
-        { id: 'meera', name: 'Meera (Female, Hindi)' },
-        { id: 'pavithra', name: 'Pavithra (Female, Tamil)' },
-        { id: 'maitreyi', name: 'Maitreyi (Female, Hindi)' },
-        { id: 'diya', name: 'Diya (Female, Hindi)' },
-        { id: 'neel', name: 'Neel (Male, Hindi)' },
-        { id: 'vian', name: 'Vian (Male, Hindi)' },
-        { id: 'arjun', name: 'Arjun (Male, Hindi)' },
-        { id: 'saurabh', name: 'Saurabh (Male, Hindi)' },
-    ];
-
-    const sarvamLanguages = [
-        { code: 'hi-IN', name: 'Hindi (India)' },
-        { code: 'en-IN', name: 'English (India)' },
-        { code: 'ta-IN', name: 'Tamil' },
-        { code: 'te-IN', name: 'Telugu' },
-        { code: 'kn-IN', name: 'Kannada' },
-        { code: 'ml-IN', name: 'Malayalam' },
-        { code: 'mr-IN', name: 'Marathi' },
-        { code: 'gu-IN', name: 'Gujarati' },
-        { code: 'bn-IN', name: 'Bengali' },
-        { code: 'pa-IN', name: 'Punjabi' },
-    ];
-
-    const languages = [
-        { code: 'en', name: 'English' },
-        { code: 'hi', name: 'Hindi' },
-        { code: 'es', name: 'Spanish' },
-        { code: 'fr', name: 'French' },
-        { code: 'de', name: 'German' },
-        { code: 'it', name: 'Italian' },
-        { code: 'pt', name: 'Portuguese' },
-        { code: 'zh', name: 'Chinese' },
-        { code: 'ja', name: 'Japanese' },
-        { code: 'ko', name: 'Korean' },
-        { code: 'ar', name: 'Arabic' },
-    ];
+    const llmProvider = findProvider(LLM_PROVIDERS, settings.llm_provider);
+    const ttsProvider = findProvider(TTS_PROVIDERS, settings.voice_provider);
+    const sttProvider = findProvider(STT_PROVIDERS, settings.stt_provider);
+    const telephonyProvider = findProvider(TELEPHONY_PROVIDERS, settings.telephony_provider);
 
     const handleProviderChange = (provider) => {
-        const defaultModel = llmModels[provider]?.[0]?.id || '';
-        setSettings({ ...settings, llm_provider: provider, llm_model: defaultModel });
+        const p = findProvider(LLM_PROVIDERS, provider);
+        setSettings({ ...settings, llm_provider: provider, llm_model: p.models[0]?.id || '' });
+    };
+
+    const handleTtsProviderChange = (provider) => {
+        const p = findProvider(TTS_PROVIDERS, provider);
+        setSettings({ ...settings, voice_provider: provider, voice_name: p.voices[0]?.id || '' });
     };
 
     const handleSave = () => {
-        // Trim whitespace-only keys before saving
+        // Trim whitespace-only "own key selected but empty" sentinels before saving
         const cleaned = { ...settings };
-        ['elevenlabs_api_key', 'sarvam_api_key', 'openai_api_key', 'gemini_api_key'].forEach(k => {
+        ['elevenlabs_api_key', 'sarvam_api_key', 'openai_api_key', 'gemini_api_key', 'anthropic_api_key', 'cartesia_api_key', 'assemblyai_api_key', 'deepgram_api_key'].forEach(k => {
             if (cleaned[k]?.trim() === '') cleaned[k] = '';
         });
         onUpdate(cleaned);
@@ -179,7 +138,7 @@ const AgentSettingsPanel = ({ agent, onUpdate, onClose }) => {
                             value={settings.llm_provider}
                             onChange={(e) => handleProviderChange(e.target.value)}
                         >
-                            {llmProviders.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
+                            {LLM_PROVIDERS.map(p => <option key={p.id} value={p.id}>{p.label}</option>)}
                         </select>
                     </div>
 
@@ -190,29 +149,18 @@ const AgentSettingsPanel = ({ agent, onUpdate, onClose }) => {
                             value={settings.llm_model}
                             onChange={(e) => set('llm_model', e.target.value)}
                         >
-                            {(llmModels[settings.llm_provider] || []).map(m => (
+                            {llmProvider.models.map(m => (
                                 <option key={m.id} value={m.id}>{m.name}</option>
                             ))}
                         </select>
                     </div>
 
-                    {/* LLM API key */}
-                    {settings.llm_provider === 'gpt' && (
-                        <KeyToggle
-                            label="OpenAI API Key"
-                            ownKey={settings.openai_api_key}
-                            onChange={(v) => set('openai_api_key', v)}
-                            placeholder="sk-proj-..."
-                        />
-                    )}
-                    {settings.llm_provider === 'gemini' && (
-                        <KeyToggle
-                            label="Gemini API Key"
-                            ownKey={settings.gemini_api_key}
-                            onChange={(v) => set('gemini_api_key', v)}
-                            placeholder="AIza..."
-                        />
-                    )}
+                    <KeyToggle
+                        label={`${llmProvider.label} API Key`}
+                        ownKey={settings[llmProvider.keyField]}
+                        onChange={(v) => set(llmProvider.keyField, v)}
+                        placeholder={KEY_PLACEHOLDER[llmProvider.keyField]}
+                    />
                 </section>
 
                 <hr className="border-border" />
@@ -225,31 +173,34 @@ const AgentSettingsPanel = ({ agent, onUpdate, onClose }) => {
                         value={settings.language}
                         onChange={(e) => set('language', e.target.value)}
                     >
-                        {languages.map(l => <option key={l.code} value={l.code}>{l.name}</option>)}
+                        {languageGroups.map((group) => (
+                            <optgroup key={group.group} label={group.group}>
+                                {group.languages.map(l => <option key={l.code} value={l.code}>{l.name}</option>)}
+                            </optgroup>
+                        ))}
                     </select>
+                    <p className="text-[10px] text-muted-foreground">Applies to any voice provider below.</p>
                 </section>
 
                 <hr className="border-border" />
 
                 {/* ── VOICE CONFIGURATION ── */}
                 <section className="space-y-3">
-                    <h4 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Voice Configuration</h4>
+                    <h4 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Voice (Text-to-Speech)</h4>
 
                     <div>
                         <label className="block text-xs font-medium mb-1">Voice Provider</label>
                         <select
                             className="w-full px-2 py-1.5 text-sm rounded-md border border-input bg-background"
                             value={settings.voice_provider}
-                            onChange={(e) => set('voice_provider', e.target.value)}
+                            onChange={(e) => handleTtsProviderChange(e.target.value)}
                         >
-                            <option value="elevenlabs">ElevenLabs</option>
-                            <option value="sarvam">Sarvam AI (Indian Languages)</option>
-                            <option value="whisper">OpenAI Whisper (Basic)</option>
+                            {TTS_PROVIDERS.map(p => <option key={p.id} value={p.id}>{p.label}</option>)}
                         </select>
+                        <p className="text-[10px] text-muted-foreground mt-1">{ttsProvider.description}</p>
                     </div>
 
-                    {/* ElevenLabs config */}
-                    {settings.voice_provider === 'elevenlabs' && (
+                    {ttsProvider.voices.length > 0 && (
                         <>
                             <div>
                                 <label className="block text-xs font-medium mb-1">Voice</label>
@@ -258,67 +209,83 @@ const AgentSettingsPanel = ({ agent, onUpdate, onClose }) => {
                                     value={settings.voice_name}
                                     onChange={(e) => set('voice_name', e.target.value)}
                                 >
-                                    {elevenLabsVoices.map(v => <option key={v.id} value={v.id}>{v.name}</option>)}
+                                    {ttsProvider.voices.map(v => <option key={v.id} value={v.id}>{v.name}</option>)}
                                 </select>
                             </div>
-                            <div>
-                                <label className="block text-xs font-medium mb-1">Custom Voice ID (optional)</label>
-                                <input
-                                    type="text"
-                                    className="w-full px-2 py-1.5 text-xs rounded-md border border-input bg-background"
-                                    value={settings.voice_id}
-                                    onChange={(e) => set('voice_id', e.target.value)}
-                                    placeholder="Leave empty to use selected voice"
-                                />
-                            </div>
-                            <KeyToggle
-                                label="ElevenLabs API Key"
-                                ownKey={settings.elevenlabs_api_key}
-                                onChange={(v) => set('elevenlabs_api_key', v)}
-                                placeholder="sk_..."
-                            />
+                            {ttsProvider.id === 'elevenlabs' && (
+                                <div>
+                                    <label className="block text-xs font-medium mb-1">Custom Voice ID (optional)</label>
+                                    <input
+                                        type="text"
+                                        className="w-full px-2 py-1.5 text-xs rounded-md border border-input bg-background"
+                                        value={settings.voice_id}
+                                        onChange={(e) => set('voice_id', e.target.value)}
+                                        placeholder="Leave empty to use selected voice"
+                                    />
+                                </div>
+                            )}
                         </>
                     )}
 
-                    {/* Sarvam config */}
-                    {settings.voice_provider === 'sarvam' && (
-                        <>
-                            <div className="rounded-md border border-yellow-500/30 bg-yellow-500/10 px-2 py-1.5">
-                                <p className="text-[10px] text-yellow-400 font-medium">Sarvam AI — 11 Indian Languages</p>
-                                <p className="text-[10px] text-muted-foreground">Bulbul v1 TTS + Saaras v2 STT</p>
-                            </div>
-                            <div>
-                                <label className="block text-xs font-medium mb-1">Voice (Speaker)</label>
-                                <select
-                                    className="w-full px-2 py-1.5 text-sm rounded-md border border-input bg-background"
-                                    value={settings.voice_name}
-                                    onChange={(e) => set('voice_name', e.target.value)}
-                                >
-                                    {sarvamVoices.map(v => <option key={v.id} value={v.id}>{v.name}</option>)}
-                                </select>
-                            </div>
-                            <div>
-                                <label className="block text-xs font-medium mb-1">Speech Language</label>
-                                <select
-                                    className="w-full px-2 py-1.5 text-sm rounded-md border border-input bg-background"
-                                    value={settings.sarvam_language}
-                                    onChange={(e) => set('sarvam_language', e.target.value)}
-                                >
-                                    {sarvamLanguages.map(l => <option key={l.code} value={l.code}>{l.name}</option>)}
-                                </select>
-                            </div>
-                            <KeyToggle
-                                label="Sarvam AI API Key"
-                                ownKey={settings.sarvam_api_key}
-                                onChange={(v) => set('sarvam_api_key', v)}
-                                placeholder="Your Sarvam API key..."
-                            />
-                        </>
-                    )}
+                    <KeyToggle
+                        label={`${ttsProvider.label} API Key`}
+                        ownKey={settings[ttsProvider.keyField]}
+                        onChange={(v) => set(ttsProvider.keyField, v)}
+                        placeholder={KEY_PLACEHOLDER[ttsProvider.keyField]}
+                    />
+                </section>
 
-                    {settings.voice_provider === 'whisper' && (
-                        <p className="text-[10px] text-muted-foreground">Uses the platform OpenAI key for Whisper STT + TTS.</p>
-                    )}
+                <hr className="border-border" />
+
+                {/* ── TRANSCRIPTION (STT) ── */}
+                <section className="space-y-3">
+                    <h4 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Transcription (Speech-to-Text)</h4>
+
+                    <div>
+                        <label className="block text-xs font-medium mb-1">Transcription Provider</label>
+                        <select
+                            className="w-full px-2 py-1.5 text-sm rounded-md border border-input bg-background"
+                            value={settings.stt_provider}
+                            onChange={(e) => set('stt_provider', e.target.value)}
+                        >
+                            {STT_PROVIDERS.map(p => <option key={p.id} value={p.id}>{p.label}</option>)}
+                        </select>
+                        <p className="text-[10px] text-muted-foreground mt-1">
+                            {settings.voice_provider === 'sarvam'
+                                ? 'Ignored while Sarvam is your Voice provider — Sarvam handles both sides.'
+                                : sttProvider.description}
+                        </p>
+                    </div>
+
+                    <KeyToggle
+                        label={`${sttProvider.label} API Key`}
+                        ownKey={settings[sttProvider.keyField]}
+                        onChange={(v) => set(sttProvider.keyField, v)}
+                        placeholder={KEY_PLACEHOLDER[sttProvider.keyField]}
+                    />
+                </section>
+
+                <hr className="border-border" />
+
+                {/* ── TELEPHONY ── */}
+                <section className="space-y-3">
+                    <h4 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Calling</h4>
+                    <div>
+                        <label className="block text-xs font-medium mb-1">Telephony Provider</label>
+                        <select
+                            className="w-full px-2 py-1.5 text-sm rounded-md border border-input bg-background"
+                            value={settings.telephony_provider}
+                            onChange={(e) => set('telephony_provider', e.target.value)}
+                        >
+                            {TELEPHONY_PROVIDERS.map(p => (
+                                <option key={p.id} value={p.id}>{p.label}{!p.supported ? ' (coming soon)' : ''}</option>
+                            ))}
+                        </select>
+                        <p className="text-[10px] text-muted-foreground mt-1">{telephonyProvider.description}</p>
+                    </div>
+                    <p className="text-[10px] text-muted-foreground">
+                        Numbers &amp; account credentials are managed once on the Integrations → Telephony page.
+                    </p>
                 </section>
 
                 {/* Save */}

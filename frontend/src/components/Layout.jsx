@@ -1,16 +1,14 @@
 import React from 'react';
 import { Link, useLocation } from 'react-router-dom';
-import { LayoutDashboard, Users, Phone, Workflow, BarChart3 } from 'lucide-react';
-import { clsx } from 'clsx';
-import { twMerge } from 'tailwind-merge';
+import { LayoutDashboard, Users, Phone, Workflow, BarChart3, KeyRound, LogOut } from 'lucide-react';
 
 import ThemeToggle from './ThemeToggle';
+import PageTransition from './ui/PageTransition';
 import { useAuth } from '../context/AuthContext';
-import { LogOut } from 'lucide-react';
+import { cn } from '../lib/utils';
 
-export function cn(...inputs) {
-    return twMerge(clsx(inputs));
-}
+// Re-exported for older imports; new code should import `cn` from `lib/utils` directly.
+export { cn };
 
 const Layout = ({ children }) => {
     const location = useLocation();
@@ -21,6 +19,7 @@ const Layout = ({ children }) => {
         { icon: Phone, label: 'Call History', path: '/calls' },
         { icon: Workflow, label: 'Workflows', path: '/workflows' },
         { icon: BarChart3, label: 'Analytics', path: '/analytics' },
+        { icon: KeyRound, label: 'Integrations', path: '/integrations' },
     ];
 
     // If we're on the workflow builder, we might want to hide the global navigation
@@ -92,7 +91,11 @@ const Layout = ({ children }) => {
                     "mx-auto h-full",
                     isWorkflowBuilder ? "w-full p-0" : "max-w-7xl p-8"
                 )}>
-                    {children}
+                    {isWorkflowBuilder ? (
+                        children
+                    ) : (
+                        <PageTransition key={location.pathname}>{children}</PageTransition>
+                    )}
                 </div>
             </main>
         </div>

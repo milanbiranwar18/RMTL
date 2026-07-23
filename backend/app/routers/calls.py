@@ -1,9 +1,14 @@
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
-from typing import List
+from typing import List, Optional
 from app.database import get_db
+from app.dependencies import get_current_user_optional
+from app.models.user import User
 from app.schemas.call import CallCreate, CallUpdate, CallResponse
 from app.services import call_service
+import logging
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter(
     prefix="/calls",
@@ -12,8 +17,14 @@ router = APIRouter(
 )
 
 @router.post("/", response_model=CallResponse)
-def create_call(call: CallCreate, db: Session = Depends(get_db)):
-    return call_service.create_call(db=db, call=call)
+def create_call(
+    call: CallCreate,
+    db: Session = Depends(get_db),
+    current_user: Optional[User] = Depends(get_current_user_optional),
+):
+    # Resolving the *caller's* saved telephony Integration (Twilio/Exotel) requires knowing
+    # who's calling — falls back to the platform-wide Twilio env vars if not logged in.
+    return call_service.create_call(db=db, call=call, user_id=current_user.id if current_user else None)
 
 @router.get("/", response_model=List[CallResponse])
 def read_calls(skip: int = 0, limit: int = 100, db: Session = Depends(get_db)):
@@ -45,63 +56,66 @@ async def get_twiml(call_id: int, request: Request, db: Session = Depends(get_db
     response.append(connect)
     return HTMLResponse(content=str(response), media_type="application/xml")
 
-from app.services.voice_service import VoiceService
+from app.services import voice_pipeline
 
 @router.websocket("/{call_id}/stream")
 async def websocket_stream(websocket: WebSocket, call_id: int, db: Session = Depends(get_db)):
     await websocket.accept()
-    
-    # We will buffer inbound audio and handle STT / TTS.
-    voice_service = VoiceService()
+
+    # Resolve the agent up front so STT/TTS/LLM all use *this* agent's provider, key, and
+    # language for the whole call — previously this handler ignored the agent entirely and
+    # always used the platform Sarvam key in Hindi with a hardcoded "You said: X" echo reply.
+    call = call_service.get_call(db, call_id=call_id)
+    agent = call.agent if call and call.agent_id else None
+    if not agent:
+        logger.warning(f"Call {call_id} has no associated agent — STT/TTS will use defaults, LLM will use a generic prompt.")
+
+    conversation_history = []
     audio_buffer = bytearray()
     stream_sid = None
-    
+
     try:
         while True:
             data = await websocket.receive_text()
             msg = json.loads(data)
-            
+
             if msg['event'] == 'start':
                 stream_sid = msg['start']['streamSid']
-                print(f"Call {call_id} Stream started: {stream_sid}")
-            
+                logger.info(f"Call {call_id} stream started: {stream_sid} | agent={agent.name if agent else 'none'} | provider={agent.voice_provider if agent else 'default'}")
+
             elif msg['event'] == 'media':
                 import base64
                 payload = msg['media']['payload']
                 audio_chunk = base64.b64decode(payload)
                 audio_buffer.extend(audio_chunk)
-                
-                # Simple logic for MVP streaming/retell flow: 
-                # After passing a certain buffer threshold (~2 seconds of audio), process it
-                if len(audio_buffer) > 16000: # 8kHz mulaw = 16k bytes = 2s
-                    # 1. Provide buffer text
-                    transcript = await voice_service.transcribe_audio_sarvam(bytes(audio_buffer))
-                    print(f"Captured Transcript: {transcript}")
-                    
-                    audio_buffer.clear() # reset buffer
-                    
+
+                # Simple MVP turn-taking: once ~2s of audio has buffered, treat it as one turn.
+                if len(audio_buffer) > 16000:  # 8kHz mulaw = 16k bytes = 2s
+                    transcript = await voice_pipeline.transcribe(agent, bytes(audio_buffer))
+                    audio_buffer.clear()
+                    logger.info(f"Call {call_id} transcript: '{transcript}'")
+
                     if transcript.strip():
-                         # 2. Get LLM response or use simple echo
-                         llm_reply = f"You said: {transcript}"
-                         
-                         # 3. TTS logic
-                         audio_base64 = await voice_service.generate_audio_sarvam(llm_reply)
-                         if audio_base64:
-                             # Send back out
-                             await websocket.send_json({
-                                 "event": "media",
-                                 "streamSid": stream_sid,
-                                 "media": {
-                                     "payload": audio_base64
-                                 }
-                             })
-                                 
+                        conversation_history.append({"role": "user", "content": transcript})
+                        llm_reply = voice_pipeline.generate_reply(agent, transcript, conversation_history)
+                        conversation_history.append({"role": "assistant", "content": llm_reply})
+
+                        audio_base64 = await voice_pipeline.synthesize(agent, llm_reply)
+                        if audio_base64:
+                            await websocket.send_json({
+                                "event": "media",
+                                "streamSid": stream_sid,
+                                "media": {
+                                    "payload": audio_base64
+                                }
+                            })
+
             elif msg['event'] == 'stop':
-                print(f"Stream stopped for Call {call_id}")
+                logger.info(f"Call {call_id} stream stopped")
                 break
-                
+
     except WebSocketDisconnect:
-        print(f"WebSocket disconnected for call {call_id}")
+        logger.info(f"Call {call_id} websocket disconnected")
     finally:
         # Evaluate POST-Call webhook feature (like Retell)
         db_call = call_service.get_call(db, call_id=call_id)

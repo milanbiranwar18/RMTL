@@ -8,6 +8,7 @@ import Workflows from './pages/Workflows';
 import WorkflowBuilder from './pages/WorkflowBuilder';
 import AgentSettings from './pages/AgentSettings';
 import Analytics from './pages/Analytics';
+import Integrations from './pages/Integrations';
 import Login from './pages/Login';
 import Register from './pages/Register';
 
@@ -42,6 +43,7 @@ function AppRoutes() {
               <Route path="/workflows/new" element={<WorkflowBuilder />} />
               <Route path="/workflows/:workflowId" element={<WorkflowBuilder />} />
               <Route path="/analytics" element={<Analytics />} />
+              <Route path="/integrations" element={<Integrations />} />
             </Routes>
           </Layout>
         </ProtectedRoute>
