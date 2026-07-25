@@ -67,3 +67,50 @@
 .react-flow__edge-path:hover+.edge-button-container .edge-button {
   opacity: 1 !important;
 }
+
+/* Workflow builder: keep React Flow's stock controls visually native to the app theme. */
+.workflow-canvas .react-flow__controls {
+  overflow: hidden;
+  border: 1px solid hsl(var(--border));
+  border-radius: 0.6rem;
+  box-shadow: 0 8px 24px rgb(0 0 0 / 18%);
+}
+
+.workflow-canvas .react-flow__controls-button {
+  width: 30px;
+  height: 30px;
+  border: 0;
+  border-bottom: 1px solid hsl(var(--border));
+  background: hsl(var(--card));
+  color: hsl(var(--foreground));
+  fill: currentColor;
+}
+
+.workflow-canvas .react-flow__controls-button:last-child {
+  border-bottom: 0;
+}
+
+.workflow-canvas .react-flow__controls-button:hover {
+  background: hsl(var(--accent));
+}
+
+.workflow-canvas .workflow-minimap {
+  overflow: hidden;
+  border: 1px solid hsl(var(--border));
+  border-radius: 0.65rem;
+  background: hsl(var(--card));
+  box-shadow: 0 10px 30px rgb(0 0 0 / 22%);
+}
+
+.workflow-canvas .react-flow__minimap-svg {
+  background: hsl(var(--card));
+}
+
+.workflow-canvas .react-flow__node.selected > div {
+  box-shadow: 0 0 0 2px hsl(var(--ring) / 70%), 0 12px 30px rgb(0 0 0 / 22%);
+}
+
+.workflow-canvas .react-flow__edge-path {
+  stroke: hsl(var(--muted-foreground) / 65%);
+  stroke-width: 1.5;
+}

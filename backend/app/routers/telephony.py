@@ -5,14 +5,28 @@ from pydantic import BaseModel
 from sqlalchemy.orm import Session
 from twilio.rest import Client as TwilioClient
 
+from app.config import settings
 from app.database import get_db
 from app.dependencies import get_current_user
 from app.models.user import User
-from app.services import integration_service
+from app.services import integration_service, telephony_service
 
 logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/telephony", tags=["telephony"])
+
+
+@router.get("/exotel/stream-url")
+def get_exotel_stream_url():
+    """The one static WebSocket URL every user pastes into their Exotel Voicebot Applet, once —
+    see telephony_service.exotel_stream_url() for why this can't be per-call like Twilio."""
+    if not settings.PUBLIC_BASE_URL:
+        return {
+            "configured": False,
+            "url": None,
+            "message": "Set PUBLIC_BASE_URL in the backend's .env first (a publicly reachable URL — e.g. an ngrok tunnel in dev).",
+        }
+    return {"configured": True, "url": telephony_service.exotel_stream_url()}
 
 
 def _get_user_twilio_credentials(db: Session, user: User) -> dict:

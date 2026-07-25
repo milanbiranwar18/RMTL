@@ -1,8 +1,21 @@
 import React, { useEffect, useState } from 'react';
 import client from '../api/client';
-import { Loader2, Bot, User, Brain, Mic, Settings2, AlertTriangle, PhoneOutgoing } from 'lucide-react';
+import { Loader2, Bot, User, Brain, Mic, Settings2, AlertTriangle, PhoneOutgoing, ExternalLink } from 'lucide-react';
+import KeyToggle from './ui/KeyToggle';
 import ConnectionStatus from './ui/ConnectionStatus';
-import { LLM_PROVIDERS, TTS_PROVIDERS, STT_PROVIDERS, TELEPHONY_PROVIDERS, findProvider } from '../lib/voiceProviders';
+import { LLM_PROVIDERS, TTS_PROVIDERS, STT_PROVIDERS, TELEPHONY_PROVIDERS, findProvider, KEY_PLACEHOLDER } from '../lib/voiceProviders';
+
+const LibraryLink = ({ href, children }) => (
+    <a
+        href={href}
+        target="_blank"
+        rel="noreferrer"
+        className="inline-flex items-center gap-1 text-xs text-primary hover:underline font-medium"
+    >
+        {children}
+        <ExternalLink className="w-3 h-3" />
+    </a>
+);
 
 const inputClass =
     'w-full px-3 py-2 text-sm rounded-md border border-input bg-background outline-none focus:ring-2 focus:ring-ring transition-shadow';
@@ -20,7 +33,6 @@ const TABS = [
 const DEFAULT_FORM = {
     name: '',
     voice_id: '',
-    llm_websocket_url: 'wss://api.openai.com/v1/realtime',
     agent_prompt: 'You are a helpful assistant.',
     language: 'en-US',
 
@@ -35,7 +47,7 @@ const DEFAULT_FORM = {
     elevenlabs_api_key: '',
     cartesia_api_key: '',
 
-    stt_provider: 'whisper',
+    stt_provider: 'auto',
     assemblyai_api_key: '',
     deepgram_api_key: '',
     sarvam_api_key: '',
@@ -90,8 +102,8 @@ const AgentForm = ({ onSuccess }) => {
         }
         setLoading(true);
         try {
-            await client.post('/agents/', formData);
-            if (onSuccess) onSuccess();
+            const res = await client.post('/agents/', formData);
+            if (onSuccess) onSuccess(res.data);
             setFormData(DEFAULT_FORM);
             setActiveTab('general');
         } catch (error) {
@@ -193,7 +205,9 @@ const AgentForm = ({ onSuccess }) => {
                                 </select>
                                 <p className="text-xs text-muted-foreground mt-1.5">
                                     The agent listens for and replies in this language — applies no matter which
-                                    voice provider you pick below.
+                                    voice provider you pick below. Need a one-off call in a different language?
+                                    Pass a <code className="bg-muted px-1 rounded">language</code> dynamic variable
+                                    when you start that call instead of changing this.
                                 </p>
                             </div>
                         </div>
@@ -219,43 +233,45 @@ const AgentForm = ({ onSuccess }) => {
                                 <div>
                                     <label className={labelClass}>Model Version</label>
                                     <select
-                                        required
                                         className={inputClass}
-                                        value={formData.llm_model}
-                                        onChange={(e) => set({ llm_model: e.target.value })}
+                                        value={llmProvider.models.some((m) => m.id === formData.llm_model) ? formData.llm_model : '__custom__'}
+                                        onChange={(e) => e.target.value !== '__custom__' && set({ llm_model: e.target.value })}
                                     >
                                         {llmProvider.models.map((model) => (
                                             <option key={model.id} value={model.id}>
                                                 {model.name}
                                             </option>
                                         ))}
+                                        <option value="__custom__">Custom model ID…</option>
                                     </select>
                                 </div>
                             </div>
 
-                            <ConnectionStatus connected={isLlmConnected} providerName={llmProvider.label} />
-
                             <div>
-                                <label className={labelClass}>{llmProvider.label} API Key (Optional)</label>
-                                <input
-                                    type="password"
-                                    className={inputClass}
-                                    value={formData[llmProvider.keyField]}
-                                    onChange={(e) => set({ [llmProvider.keyField]: e.target.value })}
-                                    placeholder="Leave blank to use your saved Integrations key"
-                                />
-                            </div>
-
-                            <div>
-                                <label className={labelClass}>LLM WebSocket URL</label>
+                                <label className={labelClass}>Model ID (editable — paste any model ID)</label>
                                 <input
                                     type="text"
                                     required
                                     className={inputClass}
-                                    value={formData.llm_websocket_url}
-                                    onChange={(e) => set({ llm_websocket_url: e.target.value })}
+                                    value={formData.llm_model}
+                                    onChange={(e) => set({ llm_model: e.target.value })}
+                                    placeholder="e.g. gpt-4o, claude-4-sonnet, gemini-3.0-pro…"
                                 />
+                                {llmProvider.libraryUrl && (
+                                    <div className="mt-1.5">
+                                        <LibraryLink href={llmProvider.libraryUrl}>{llmProvider.libraryLabel}</LibraryLink>
+                                    </div>
+                                )}
                             </div>
+
+                            <KeyToggle
+                                label={`${llmProvider.label} API Key`}
+                                ownKey={formData[llmProvider.keyField]}
+                                onChange={(v) => set({ [llmProvider.keyField]: v })}
+                                placeholder={KEY_PLACEHOLDER[llmProvider.keyField]}
+                                connected={isLlmConnected}
+                                sharedKeyNote={llmProvider.sharedKeyNote}
+                            />
 
                             <div>
                                 <label className={labelClass}>Prompt</label>
@@ -286,50 +302,55 @@ const AgentForm = ({ onSuccess }) => {
                                 </select>
                                 <p className="text-xs text-muted-foreground">{ttsProvider.description}</p>
 
-                                <ConnectionStatus connected={isTtsConnected} providerName={ttsProvider.label} />
-
                                 {ttsProvider.voices.length > 0 && (
-                                    <div className="grid grid-cols-2 gap-3">
-                                        <div>
-                                            <label className={labelClass}>Voice</label>
-                                            <select
-                                                required
-                                                className={inputClass}
-                                                value={formData.voice_name}
-                                                onChange={(e) => set({ voice_name: e.target.value })}
-                                            >
-                                                {ttsProvider.voices.map((voice) => (
-                                                    <option key={voice.id} value={voice.id}>
-                                                        {voice.name}
-                                                    </option>
-                                                ))}
-                                            </select>
-                                        </div>
-                                        {ttsProvider.id === 'elevenlabs' && (
-                                            <div>
-                                                <label className={labelClass}>Voice ID (Optional)</label>
-                                                <input
-                                                    type="text"
-                                                    className={inputClass}
-                                                    value={formData.voice_id}
-                                                    onChange={(e) => set({ voice_id: e.target.value })}
-                                                    placeholder="Custom voice ID"
-                                                />
-                                            </div>
-                                        )}
+                                    <div>
+                                        <label className={labelClass}>Voice</label>
+                                        <select
+                                            className={inputClass}
+                                            value={ttsProvider.voices.some((v) => v.id === formData.voice_name) ? formData.voice_name : '__custom__'}
+                                            onChange={(e) => e.target.value !== '__custom__' && set({ voice_name: e.target.value, voice_id: '' })}
+                                        >
+                                            {ttsProvider.voices.map((voice) => (
+                                                <option key={voice.id} value={voice.id}>
+                                                    {voice.name}
+                                                </option>
+                                            ))}
+                                            <option value="__custom__">Custom / not listed above…</option>
+                                        </select>
                                     </div>
                                 )}
 
                                 <div>
-                                    <label className={labelClass}>{ttsProvider.label} API Key (Optional)</label>
+                                    <label className={labelClass}>
+                                        {ttsProvider.customFieldLabel || 'Custom Voice ID'} (Optional — overrides the dropdown)
+                                    </label>
                                     <input
-                                        type="password"
+                                        type="text"
+                                        required={ttsProvider.voices.length === 0}
                                         className={inputClass}
-                                        value={formData[ttsProvider.keyField]}
-                                        onChange={(e) => set({ [ttsProvider.keyField]: e.target.value })}
-                                        placeholder="Leave blank to use your saved Integrations key"
+                                        value={ttsProvider.id === 'elevenlabs' ? formData.voice_id : formData.voice_name}
+                                        onChange={(e) =>
+                                            ttsProvider.id === 'elevenlabs'
+                                                ? set({ voice_id: e.target.value })
+                                                : set({ voice_name: e.target.value })
+                                        }
+                                        placeholder={ttsProvider.voices.length === 0 ? 'Paste a voice ID from the library below' : 'Not using one of the voices above? Paste its ID/name here'}
                                     />
+                                    {ttsProvider.libraryUrl && (
+                                        <div className="mt-1.5">
+                                            <LibraryLink href={ttsProvider.libraryUrl}>{ttsProvider.libraryLabel}</LibraryLink>
+                                        </div>
+                                    )}
                                 </div>
+
+                                <KeyToggle
+                                    label={`${ttsProvider.label} API Key`}
+                                    ownKey={formData[ttsProvider.keyField]}
+                                    onChange={(v) => set({ [ttsProvider.keyField]: v })}
+                                    placeholder={KEY_PLACEHOLDER[ttsProvider.keyField]}
+                                    connected={isTtsConnected}
+                                    sharedKeyNote={ttsProvider.sharedKeyNote}
+                                />
                             </div>
 
                             <hr className="border-border" />
@@ -341,6 +362,7 @@ const AgentForm = ({ onSuccess }) => {
                                     className={inputClass}
                                     value={formData.stt_provider}
                                     onChange={(e) => set({ stt_provider: e.target.value })}
+                                    disabled={formData.voice_provider === 'sarvam'}
                                 >
                                     {STT_PROVIDERS.map((p) => (
                                         <option key={p.id} value={p.id}>{p.label}</option>
@@ -352,18 +374,21 @@ const AgentForm = ({ onSuccess }) => {
                                         : sttProvider.description}
                                 </p>
 
-                                <ConnectionStatus connected={isSttConnected} providerName={sttProvider.label} />
-
-                                <div>
-                                    <label className={labelClass}>{sttProvider.label} API Key (Optional)</label>
-                                    <input
-                                        type="password"
-                                        className={inputClass}
-                                        value={formData[sttProvider.keyField]}
-                                        onChange={(e) => set({ [sttProvider.keyField]: e.target.value })}
-                                        placeholder="Leave blank to use your saved Integrations key"
-                                    />
-                                </div>
+                                {formData.voice_provider !== 'sarvam' && sttProvider.id !== 'auto' && (
+                                    <>
+                                        {sttProvider.libraryUrl && (
+                                            <LibraryLink href={sttProvider.libraryUrl}>See {sttProvider.label} model options</LibraryLink>
+                                        )}
+                                        <KeyToggle
+                                            label={`${sttProvider.label} API Key`}
+                                            ownKey={formData[sttProvider.keyField]}
+                                            onChange={(v) => set({ [sttProvider.keyField]: v })}
+                                            placeholder={KEY_PLACEHOLDER[sttProvider.keyField]}
+                                            connected={isSttConnected}
+                                            sharedKeyNote={sttProvider.sharedKeyNote}
+                                        />
+                                    </>
+                                )}
                             </div>
                         </div>
                     )}
@@ -389,15 +414,19 @@ const AgentForm = ({ onSuccess }) => {
 
                             <ConnectionStatus connected={isTelephonyConnected} providerName={telephonyProvider.label} />
 
-                            <div className="rounded-md border border-border bg-muted/50 p-3 text-xs text-muted-foreground space-y-1.5">
+                            <div className="rounded-md border border-border bg-muted/50 p-3 text-xs text-muted-foreground space-y-2">
                                 <p>
-                                    Phone numbers and account credentials for {telephonyProvider.label} are managed once,
-                                    account-wide, on the{' '}
-                                    <a href="/integrations" className="text-primary hover:underline font-medium">
-                                        Integrations → Telephony
-                                    </a>{' '}
-                                    page — including searching for and buying a Twilio number.
+                                    Phone numbers and account credentials for any telephony provider are entered <strong>once,
+                                    account-wide</strong> (not per-agent) — every agent that picks {telephonyProvider.label}
+                                    reuses the same connected account.
                                 </p>
+                                <a
+                                    href={`/integrations?open=telephony:${telephonyProvider.id}`}
+                                    className="inline-flex items-center gap-1.5 rounded-md bg-primary text-primary-foreground px-3 py-1.5 text-xs font-medium hover:bg-primary/90 transition-colors"
+                                >
+                                    <PhoneOutgoing className="w-3 h-3" />
+                                    {isTelephonyConnected ? `Manage your ${telephonyProvider.label} setup` : `Configure ${telephonyProvider.label} now`}
+                                </a>
                                 {!telephonyProvider.supported && (
                                     <p className="text-yellow-600 dark:text-yellow-400">
                                         Outbound calling isn't wired up for {telephonyProvider.label} yet — switch to Twilio

@@ -10,7 +10,7 @@ const DialogueNode = ({ data, isConnectable, id }) => {
     const { onDuplicate, onDelete, onEdit } = useNodeActions();
 
     return (
-        <div className="w-[300px] shadow-xl rounded-lg bg-card border border-border text-card-foreground overflow-hidden font-sans">
+        <div className="w-[270px] shadow-lg shadow-black/15 rounded-lg bg-card/95 border border-border text-card-foreground overflow-hidden font-sans">
             <NodeContextMenu
                 nodeId={id}
                 nodeType="dialogue"
@@ -20,7 +20,7 @@ const DialogueNode = ({ data, isConnectable, id }) => {
             />
 
             {/* Header */}
-            <div className="bg-muted px-4 py-2 border-b border-border flex items-center justify-between">
+            <div className="bg-muted/70 px-3 py-2 border-b border-border flex items-center justify-between">
                 <div className="flex items-center gap-2">
                     <MessageSquare className="w-4 h-4 text-primary" />
                     <span className="font-medium text-sm text-foreground">Conversation</span>
@@ -39,9 +39,9 @@ const DialogueNode = ({ data, isConnectable, id }) => {
             />
 
             {/* Content */}
-            <div className="p-4 space-y-3">
+            <div className="p-3 space-y-2.5">
                 {/* Prompt/Text Preview */}
-                <div className="text-sm text-muted-foreground bg-muted/50 p-3 rounded border border-border">
+                <div className="text-sm text-muted-foreground bg-muted/35 p-2.5 rounded-md border border-border/80">
                     {data.label ? (
                         <div className="font-medium mb-1 text-foreground">{data.label}</div>
                     ) : null}
@@ -51,7 +51,7 @@ const DialogueNode = ({ data, isConnectable, id }) => {
                 </div>
 
                 {/* Transitions Section */}
-                <div className="mt-4">
+                <div className="mt-3">
                     <div className="flex items-center justify-between mb-2 px-1">
                         <span className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Transition</span>
                         <button
@@ -71,7 +71,7 @@ const DialogueNode = ({ data, isConnectable, id }) => {
                     <div className="space-y-2">
                         {hasConditions && conditions.map((condition, index) => (
                             <div key={index} className="relative group">
-                                <div className="flex items-center justify-between bg-muted/50 hover:bg-muted p-2 rounded border border-border transition-colors text-xs">
+                                <div className="flex items-center justify-between bg-muted/35 hover:bg-muted p-2 rounded-md border border-border/80 transition-colors text-xs">
                                     <span className="text-foreground truncate pr-4">{condition.label || 'Condition'}</span>
                                 </div>
 
@@ -88,7 +88,7 @@ const DialogueNode = ({ data, isConnectable, id }) => {
 
                         {/* Default Handle - Always visible */}
                         <div className="relative group">
-                            <div className="flex items-center justify-between bg-muted/50 p-2 rounded border border-border text-xs text-muted-foreground italic">
+                            <div className="flex items-center justify-between bg-muted/35 p-2 rounded-md border border-border/80 text-xs text-muted-foreground italic">
                                 Default / Next
                             </div>
                             <Handle

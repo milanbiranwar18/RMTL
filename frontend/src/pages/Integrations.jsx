@@ -1,4 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import {
     KeyRound,
     Star,
@@ -10,27 +11,50 @@ import {
     Plug,
     PhoneCall,
     Search,
+    Copy,
+    Check,
 } from 'lucide-react';
 import client from '../api/client';
 import { cn } from '../lib/utils';
 import Badge from '../components/ui/Badge';
 import PageHeader from '../components/ui/PageHeader';
 
+// "Voice" merges the old separate Speech-to-Text / Text-to-Speech tabs into one — most agents
+// pick both from the same vendor (Deepgram, Sarvam), and a few vendors (Sarvam, OpenAI) sell one
+// account key that covers LLM + STT + TTS entirely. Splitting BYOK connection into 4 tabs meant
+// asking for the identical key up to 3 times; grouping by "what does this vendor let you do" and
+// merging same-id entries across stt/tts fixes that without losing the STT-vs-TTS distinction
+// (still shown per-card via badges — Deepgram/Sarvam do both, ElevenLabs/Cartesia are TTS-only,
+// AssemblyAI is STT-only).
 const CATEGORY_TABS = [
     { id: 'llm', label: 'LLM' },
-    { id: 'stt', label: 'Speech-to-Text' },
-    { id: 'tts', label: 'Text-to-Speech' },
+    { id: 'voice', label: 'Voice' },
     { id: 'telephony', label: 'Telephony' },
 ];
 
 const CATEGORY_BLURB = {
     llm: 'The language model that thinks for your agent and decides what to say or which tool to call.',
-    stt: 'Transcribes the caller\u2019s speech into text in real time.',
-    tts: 'Converts your agent\u2019s text response back into natural speech.',
+    voice: 'Speech-to-Text transcribes the caller in real time; Text-to-Speech turns your agent\u2019s reply back into audio. Providers that offer both (Deepgram, Sarvam) only need connecting once here \u2014 pick either side for each agent independently in its Voice tab.',
     telephony: 'Connects your agent to real phone numbers to make and receive calls.',
 };
 
+const CAPABILITY_LABEL = { stt: 'Speech-to-Text', tts: 'Text-to-Speech' };
+
+// Merge same-id provider entries across stt/tts into one card, remembering every category
+// (each becomes its own Integration row server-side) each one applies to.
+function mergeVoiceProviders(catalog) {
+    const byId = new Map();
+    for (const cat of ['stt', 'tts']) {
+        for (const p of catalog?.[cat] || []) {
+            if (!byId.has(p.id)) byId.set(p.id, { ...p, categories: [] });
+            byId.get(p.id).categories.push(cat);
+        }
+    }
+    return Array.from(byId.values());
+}
+
 export default function Integrations() {
+    const [searchParams, setSearchParams] = useSearchParams();
     const [catalog, setCatalog] = useState(null);
     const [integrations, setIntegrations] = useState([]);
     const [activeTab, setActiveTab] = useState('llm');
@@ -68,16 +92,49 @@ export default function Integrations() {
         return map;
     }, [integrations]);
 
-    const handleSave = async (category, providerId, credentials) => {
+    // Deep link support — other pages (Agent forms, the Calling tab) link here as
+    // `/integrations?open=telephony:exotel` so "where do I set up Exotel?" is a single click
+    // away instead of "go find it yourself on this page".
+    useEffect(() => {
+        if (!catalog) return;
+        const open = searchParams.get('open');
+        if (!open) return;
+        const [category, providerId] = open.split(':');
+        const tab = category === 'stt' || category === 'tts' ? 'voice' : category;
+        const providerList = tab === 'voice' ? mergeVoiceProviders(catalog) : (catalog[category] || []);
+        const provider = providerList.find((p) => p.id === providerId);
+        if (provider) {
+            setActiveTab(tab);
+            const categories = provider.categories || [category];
+            setEditingProvider({
+                categories,
+                provider,
+                savedEntries: categories.map((c) => savedByKey[`${c}:${providerId}`]).filter(Boolean),
+            });
+        }
+        setSearchParams((prev) => {
+            const next = new URLSearchParams(prev);
+            next.delete('open');
+            return next;
+        }, { replace: true });
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [catalog]);
+
+    const handleSave = async (categories, providerId, credentials) => {
         setSavingProviderId(providerId);
         setError('');
         try {
-            const res = await client.post('/integrations/', { category, provider: providerId, credentials });
-            setIntegrations((prev) => {
-                const others = prev.filter((i) => !(i.category === category && i.provider === providerId));
-                return [...others, res.data];
-            });
+            let last = null;
+            for (const category of categories) {
+                const res = await client.post('/integrations/', { category, provider: providerId, credentials });
+                last = res.data;
+                setIntegrations((prev) => {
+                    const others = prev.filter((i) => !(i.category === category && i.provider === providerId));
+                    return [...others, res.data];
+                });
+            }
             setEditingProvider(null);
+            return last;
         } catch (err) {
             setError(err.response?.data?.detail || 'Failed to save credentials');
         } finally {
@@ -85,14 +142,17 @@ export default function Integrations() {
         }
     };
 
-    const handleDelete = async (integration) => {
-        if (!window.confirm(`Remove the ${integration.provider} key? Agents using it will stop working until you add a new key.`)) {
+    const handleDelete = async (savedEntries) => {
+        const entries = Array.isArray(savedEntries) ? savedEntries : [savedEntries];
+        if (entries.length === 0) return;
+        if (!window.confirm(`Remove the ${entries[0].provider} key? Agents using it will stop working until you add a new key.`)) {
             return;
         }
-        setDeletingId(integration.id);
+        setDeletingId(entries[0].id);
         try {
-            await client.delete(`/integrations/${integration.id}`);
-            setIntegrations((prev) => prev.filter((i) => i.id !== integration.id));
+            await Promise.all(entries.map((integration) => client.delete(`/integrations/${integration.id}`)));
+            const ids = new Set(entries.map((e) => e.id));
+            setIntegrations((prev) => prev.filter((i) => !ids.has(i.id)));
         } catch (err) {
             setError(err.response?.data?.detail || 'Failed to remove integration');
         } finally {
@@ -104,7 +164,7 @@ export default function Integrations() {
         return <div className="p-8 text-center text-muted-foreground">Loading integrations...</div>;
     }
 
-    const providers = catalog?.[activeTab] || [];
+    const providers = activeTab === 'voice' ? mergeVoiceProviders(catalog) : (catalog?.[activeTab] || []);
 
     return (
         <div className="space-y-8">
@@ -143,15 +203,18 @@ export default function Integrations() {
             {/* Provider cards */}
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 {providers.map((provider) => {
-                    const saved = savedByKey[`${activeTab}:${provider.id}`];
+                    const categories = provider.categories || [activeTab];
+                    const savedEntries = categories.map((c) => savedByKey[`${c}:${provider.id}`]).filter(Boolean);
+                    const saved = savedEntries[0];
                     return (
                         <ProviderCard
                             key={provider.id}
-                            category={activeTab}
+                            categories={categories}
                             provider={provider}
                             saved={saved}
-                            onConnect={() => setEditingProvider({ category: activeTab, provider, saved })}
-                            onDelete={saved ? () => handleDelete(saved) : undefined}
+                            connected={savedEntries.length > 0}
+                            onConnect={() => setEditingProvider({ categories, provider, savedEntries })}
+                            onDelete={savedEntries.length > 0 ? () => handleDelete(savedEntries) : undefined}
                             deleting={saved && deletingId === saved.id}
                         >
                             {activeTab === 'telephony' && provider.id === 'twilio' && saved && (
@@ -164,33 +227,42 @@ export default function Integrations() {
 
             {editingProvider && (
                 <CredentialModal
-                    category={editingProvider.category}
+                    categories={editingProvider.categories}
                     provider={editingProvider.provider}
-                    saved={editingProvider.saved}
+                    saved={editingProvider.savedEntries?.[0]}
                     saving={savingProviderId === editingProvider.provider.id}
                     onCancel={() => setEditingProvider(null)}
-                    onSave={(credentials) => handleSave(editingProvider.category, editingProvider.provider.id, credentials)}
+                    onSave={(credentials) => handleSave(editingProvider.categories, editingProvider.provider.id, credentials)}
                 />
             )}
         </div>
     );
 }
 
-function ProviderCard({ provider, saved, onConnect, onDelete, deleting, children }) {
+function ProviderCard({ provider, categories, saved, connected, onConnect, onDelete, deleting, children }) {
     return (
         <div className="bg-card border border-border rounded-lg p-5 flex flex-col gap-3">
             <div className="flex items-start justify-between gap-2">
                 <div>
-                    <div className="flex items-center gap-2">
+                    <div className="flex items-center gap-2 flex-wrap">
                         <h3 className="font-semibold">{provider.name}</h3>
                         {provider.recommended && (
                             <Badge variant="primary" icon={Star}>Recommended</Badge>
                         )}
-                        {saved && (
+                        {connected && (
                             <Badge variant="success" icon={CheckCircle2}>Connected</Badge>
                         )}
+                        {categories?.length > 1 && categories.map((c) => (
+                            <Badge key={c} variant="neutral">{CAPABILITY_LABEL[c] || c}</Badge>
+                        ))}
                     </div>
                     <p className="text-sm text-muted-foreground mt-1">{provider.description}</p>
+                    {provider.shares_key_with && (
+                        <p className="text-xs text-primary/80 mt-1">
+                            One key here covers this everywhere it's offered (LLM, Speech-to-Text and/or
+                            Text-to-Speech) — no need to connect it again elsewhere.
+                        </p>
+                    )}
                 </div>
             </div>
 
@@ -350,7 +422,63 @@ function TwilioNumberSearch({ onBought }) {
     );
 }
 
-function CredentialModal({ category, provider, saved, saving, onCancel, onSave }) {
+function ExotelStreamUrlBox() {
+    const [data, setData] = useState(null);
+    const [copied, setCopied] = useState(false);
+
+    useEffect(() => {
+        client.get('/telephony/exotel/stream-url').then((res) => setData(res.data)).catch(() => setData({ configured: false }));
+    }, []);
+
+    const copy = () => {
+        if (!data?.url) return;
+        navigator.clipboard?.writeText(data.url);
+        setCopied(true);
+        setTimeout(() => setCopied(false), 1500);
+    };
+
+    if (!data) return null;
+
+    return (
+        <div className="rounded-md border border-border bg-muted/50 p-3 text-xs space-y-2">
+            <p className="font-semibold">One-time Exotel Flow setup</p>
+            {data.configured ? (
+                <>
+                    <p className="text-muted-foreground">
+                        In Exotel's App Bazaar, build a Flow with a <strong>Voicebot Applet</strong> pointed at this
+                        exact URL (same URL for every agent — Exotel's own call ID routes each call automatically),
+                        then paste that Flow's App ID below.
+                    </p>
+                    <div className="flex items-center gap-1.5">
+                        <code className="flex-1 bg-background border border-border rounded px-2 py-1.5 font-mono text-[11px] truncate">
+                            {data.url}
+                        </code>
+                        <button
+                            type="button"
+                            onClick={copy}
+                            className="p-1.5 rounded-md border border-border hover:bg-accent shrink-0"
+                            title="Copy"
+                        >
+                            {copied ? <Check className="w-3.5 h-3.5 text-green-500" /> : <Copy className="w-3.5 h-3.5" />}
+                        </button>
+                    </div>
+                </>
+            ) : (
+                <p className="text-yellow-600 dark:text-yellow-400">{data.message || 'Backend PUBLIC_BASE_URL is not configured yet — ask an admin to set it before this will work.'}</p>
+            )}
+            <a
+                href="https://developer.exotel.com/docs/agentstream/stream-voicebot-applet"
+                target="_blank"
+                rel="noreferrer"
+                className="inline-flex items-center gap-1 text-primary hover:underline font-medium"
+            >
+                Full Exotel Voicebot Applet docs <ExternalLink className="w-3 h-3" />
+            </a>
+        </div>
+    );
+}
+
+function CredentialModal({ categories, provider, saved, saving, onCancel, onSave }) {
     const [values, setValues] = useState(() => {
         const initial = {};
         for (const field of provider.fields) {
@@ -367,7 +495,7 @@ function CredentialModal({ category, provider, saved, saving, onCancel, onSave }
     return (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4" onClick={onCancel}>
             <div
-                className="bg-card border border-border rounded-xl p-6 w-full max-w-md shadow-2xl"
+                className="bg-card border border-border rounded-xl p-6 w-full max-w-md shadow-2xl max-h-[90vh] overflow-y-auto"
                 onClick={(e) => e.stopPropagation()}
             >
                 <div className="flex items-center justify-between mb-1">
@@ -380,22 +508,43 @@ function CredentialModal({ category, provider, saved, saving, onCancel, onSave }
                     </button>
                 </div>
                 <p className="text-sm text-muted-foreground mb-4">
-                    Category: <span className="capitalize">{category}</span>
+                    {categories?.length > 1 ? (
+                        <>Covers: <span className="capitalize">{categories.map((c) => CAPABILITY_LABEL[c] || c).join(' + ')}</span></>
+                    ) : (
+                        <>Category: <span className="capitalize">{categories?.[0]}</span></>
+                    )}
                     {saved ? ' — entering new values will replace the existing key.' : ''}
                 </p>
+
+                {provider.id === 'exotel' && (
+                    <div className="mb-4">
+                        <ExotelStreamUrlBox />
+                    </div>
+                )}
 
                 <form onSubmit={handleSubmit} className="space-y-3">
                     {provider.fields.map((field) => (
                         <div key={field.key}>
                             <label className="text-sm font-medium block mb-1">{field.label}</label>
-                            <input
-                                type={field.type === 'password' ? 'password' : 'text'}
-                                required
-                                value={values[field.key]}
-                                onChange={(e) => setValues((v) => ({ ...v, [field.key]: e.target.value }))}
-                                placeholder={saved ? '••••••••••••' : `Enter ${field.label.toLowerCase()}`}
-                                className="w-full px-3 py-2 rounded-md border border-input bg-background text-sm outline-none focus:ring-2 focus:ring-ring"
-                            />
+                            {field.type === 'textarea' ? (
+                                <textarea
+                                    required
+                                    rows={6}
+                                    value={values[field.key]}
+                                    onChange={(e) => setValues((v) => ({ ...v, [field.key]: e.target.value }))}
+                                    placeholder={saved ? '•••••••••••• (unchanged)' : `Paste ${field.label.toLowerCase()}`}
+                                    className="w-full px-3 py-2 rounded-md border border-input bg-background text-xs font-mono outline-none focus:ring-2 focus:ring-ring resize-y"
+                                />
+                            ) : (
+                                <input
+                                    type={field.type === 'password' ? 'password' : 'text'}
+                                    required
+                                    value={values[field.key]}
+                                    onChange={(e) => setValues((v) => ({ ...v, [field.key]: e.target.value }))}
+                                    placeholder={saved ? '••••••••••••' : `Enter ${field.label.toLowerCase()}`}
+                                    className="w-full px-3 py-2 rounded-md border border-input bg-background text-sm outline-none focus:ring-2 focus:ring-ring"
+                                />
+                            )}
                         </div>
                     ))}
 

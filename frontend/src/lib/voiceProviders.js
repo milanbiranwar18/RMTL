@@ -6,6 +6,13 @@
 // backend/app/models/agent.py + schemas/agent.py). `catalogId` maps to the Integrations
 // provider catalog id (GET /integrations/catalog) so ConnectionStatus can tell the user
 // whether they already have a key saved there.
+//
+// `voices`/`models` lists are curated shortcuts, not the *complete* set every provider offers —
+// providers add new voices/models faster than we can track here. That's why every provider also
+// carries a `libraryUrl` (where to go browse/preview everything they actually have) and every
+// picker in the UI renders a "custom ID" fallback input next to the dropdown, so nothing is ever
+// truly unreachable through this platform — pick it on the provider's own site, paste the
+// ID/name back here.
 
 export const LLM_PROVIDERS = [
     {
@@ -14,6 +21,9 @@ export const LLM_PROVIDERS = [
         catalogId: 'openai',
         catalogCategory: 'llm',
         keyField: 'openai_api_key',
+        sharedKeyNote: 'This same key also covers OpenAI Whisper (STT) and OpenAI TTS if you pick those below.',
+        libraryUrl: 'https://platform.openai.com/docs/models',
+        libraryLabel: 'Browse all OpenAI models',
         models: [
             { id: 'gpt-4o', name: 'GPT-4o (Latest)' },
             { id: 'gpt-4-turbo', name: 'GPT-4 Turbo' },
@@ -27,6 +37,8 @@ export const LLM_PROVIDERS = [
         catalogId: 'anthropic',
         catalogCategory: 'llm',
         keyField: 'anthropic_api_key',
+        libraryUrl: 'https://docs.anthropic.com/en/docs/about-claude/models',
+        libraryLabel: 'Browse all Claude models',
         models: [
             { id: 'claude-3-5-sonnet-20241022', name: 'Claude 3.5 Sonnet' },
             { id: 'claude-3-opus-20240229', name: 'Claude 3 Opus' },
@@ -39,6 +51,8 @@ export const LLM_PROVIDERS = [
         catalogId: 'gemini',
         catalogCategory: 'llm',
         keyField: 'gemini_api_key',
+        libraryUrl: 'https://ai.google.dev/gemini-api/docs/models',
+        libraryLabel: 'Browse all Gemini models',
         models: [
             { id: 'gemini-2.5-flash', name: 'Gemini 2.5 Flash' },
             { id: 'gemini-1.5-pro', name: 'Gemini 1.5 Pro' },
@@ -52,6 +66,9 @@ export const LLM_PROVIDERS = [
         catalogId: 'sarvam',
         catalogCategory: 'llm',
         keyField: 'sarvam_api_key',
+        sharedKeyNote: 'One Sarvam key covers LLM, Speech-to-Text and Text-to-Speech — connect it once, anywhere.',
+        libraryUrl: 'https://docs.sarvam.ai/api/getting-started/models',
+        libraryLabel: 'Browse all Sarvam models',
         models: [
             { id: 'sarvam-30b', name: 'Sarvam 30B' },
             { id: 'sarvam-105b', name: 'Sarvam 105B' },
@@ -67,6 +84,9 @@ export const TTS_PROVIDERS = [
         catalogCategory: 'tts',
         keyField: 'elevenlabs_api_key',
         description: 'Most natural voices, ~75-150ms latency.',
+        libraryUrl: 'https://elevenlabs.io/app/voice-library',
+        libraryLabel: 'Browse 10,000+ voices in the ElevenLabs Voice Library',
+        customFieldLabel: 'Custom Voice ID (from ElevenLabs Voice Library)',
         voices: [
             { id: 'Rachel', name: 'Rachel (Female, American)' },
             { id: 'Bella', name: 'Bella (Female, American)' },
@@ -83,18 +103,55 @@ export const TTS_PROVIDERS = [
     },
     {
         id: 'sarvam',
-        label: 'Sarvam AI (Bulbul)',
+        label: 'Sarvam AI (Bulbul v3)',
         catalogId: 'sarvam',
         catalogCategory: 'tts',
         keyField: 'sarvam_api_key',
+        sharedKeyNote: 'One Sarvam key covers LLM, Speech-to-Text and Text-to-Speech — connect it once, anywhere.',
         description: 'Most natural voices across 11 Indian languages — speaks whichever language is set in General.',
+        libraryUrl: 'https://docs.sarvam.ai/api/getting-started/models/bulbul',
+        libraryLabel: 'See all 37 Bulbul v3 speakers',
+        customFieldLabel: 'Custom speaker name (must be a bulbul:v3 speaker)',
+        // Full bulbul:v3 catalog — v2-only names (anushka, manisha, vidya, arya, abhilash,
+        // karun, hitesh) intentionally excluded, they 400 when paired with the v3 model we call.
         voices: [
-            { id: 'meera', name: 'Meera (Female, Hindi)' },
-            { id: 'pavithra', name: 'Pavithra (Female, Tamil)' },
-            { id: 'maitreyi', name: 'Maitreyi (Female, Hindi)' },
-            { id: 'diya', name: 'Diya (Female, Hindi)' },
-            { id: 'neel', name: 'Neel (Male, Hindi)' },
-            { id: 'arjun', name: 'Arjun (Male, Hindi)' },
+            { id: 'shubh', name: 'Shubh (Male) — default' },
+            { id: 'aditya', name: 'Aditya (Male)' },
+            { id: 'ritu', name: 'Ritu (Female)' },
+            { id: 'priya', name: 'Priya (Female)' },
+            { id: 'neha', name: 'Neha (Female)' },
+            { id: 'rahul', name: 'Rahul (Male)' },
+            { id: 'pooja', name: 'Pooja (Female)' },
+            { id: 'rohan', name: 'Rohan (Male)' },
+            { id: 'simran', name: 'Simran (Female)' },
+            { id: 'kavya', name: 'Kavya (Female)' },
+            { id: 'amit', name: 'Amit (Male)' },
+            { id: 'dev', name: 'Dev (Male)' },
+            { id: 'ishita', name: 'Ishita (Female)' },
+            { id: 'shreya', name: 'Shreya (Female)' },
+            { id: 'ratan', name: 'Ratan (Male)' },
+            { id: 'varun', name: 'Varun (Male)' },
+            { id: 'manan', name: 'Manan (Male)' },
+            { id: 'sumit', name: 'Sumit (Male)' },
+            { id: 'roopa', name: 'Roopa (Female)' },
+            { id: 'kabir', name: 'Kabir (Male)' },
+            { id: 'aayan', name: 'Aayan (Male)' },
+            { id: 'ashutosh', name: 'Ashutosh (Male)' },
+            { id: 'advait', name: 'Advait (Male)' },
+            { id: 'anand', name: 'Anand (Male)' },
+            { id: 'tanya', name: 'Tanya (Female)' },
+            { id: 'tarun', name: 'Tarun (Male)' },
+            { id: 'sunny', name: 'Sunny (Male)' },
+            { id: 'mani', name: 'Mani (Male)' },
+            { id: 'gokul', name: 'Gokul (Male)' },
+            { id: 'vijay', name: 'Vijay (Male)' },
+            { id: 'shruti', name: 'Shruti (Female)' },
+            { id: 'suhani', name: 'Suhani (Female)' },
+            { id: 'mohit', name: 'Mohit (Male)' },
+            { id: 'kavitha', name: 'Kavitha (Female)' },
+            { id: 'rehan', name: 'Rehan (Male)' },
+            { id: 'soham', name: 'Soham (Male)' },
+            { id: 'rupali', name: 'Rupali (Female)' },
         ],
     },
     {
@@ -103,37 +160,82 @@ export const TTS_PROVIDERS = [
         catalogId: 'cartesia',
         catalogCategory: 'tts',
         keyField: 'cartesia_api_key',
-        description: 'Lowest-latency TTS in the market (40-90ms).',
+        description: 'Lowest-latency TTS in the market (40-90ms). 500+ voices — pick one on their site and paste the Voice ID below.',
+        libraryUrl: 'https://play.cartesia.ai/voices',
+        libraryLabel: 'Browse 500+ voices in the Cartesia Voice Library',
+        customFieldLabel: 'Voice ID (from Cartesia Voice Library)',
         voices: [],
     },
     {
         id: 'deepgram_aura',
         label: 'Deepgram Aura',
-        catalogId: 'deepgram_aura',
+        catalogId: 'deepgram',
         catalogCategory: 'tts',
         keyField: 'deepgram_api_key',
+        sharedKeyNote: 'Uses the same Deepgram key as Speech-to-Text — one connection covers both.',
         description: 'Good pick if you already use Deepgram for transcription (single vendor).',
-        voices: [],
+        libraryUrl: 'https://developers.deepgram.com/docs/tts-models',
+        libraryLabel: 'Browse all 40+ Aura-2 voices (7 languages)',
+        customFieldLabel: 'Custom model string (e.g. aura-2-orpheus-en)',
+        voices: [
+            { id: 'aura-2-thalia-en', name: 'Thalia (Female, US) — default' },
+            { id: 'aura-2-apollo-en', name: 'Apollo (Male, US)' },
+            { id: 'aura-2-luna-en', name: 'Luna (Female, US)' },
+            { id: 'aura-2-orpheus-en', name: 'Orpheus (Male, US)' },
+            { id: 'aura-2-electra-en', name: 'Electra (Female, US)' },
+            { id: 'aura-2-hermes-en', name: 'Hermes (Male, US)' },
+            { id: 'aura-2-theia-en', name: 'Theia (Female, AU)' },
+            { id: 'aura-2-hyperion-en', name: 'Hyperion (Male, AU)' },
+        ],
     },
     {
         id: 'openai_tts',
         label: 'OpenAI TTS',
-        catalogId: 'openai_tts',
-        catalogCategory: 'tts',
+        catalogId: 'openai',
+        catalogCategory: 'llm',
         keyField: 'openai_api_key',
+        sharedKeyNote: 'Uses the same OpenAI key as your LLM connection — nothing new to connect.',
         description: 'Cheapest, simplest fallback voice.',
-        voices: [],
+        libraryUrl: 'https://platform.openai.com/docs/guides/text-to-speech',
+        libraryLabel: 'Preview all OpenAI voices',
+        customFieldLabel: 'Custom voice name',
+        voices: [
+            { id: 'alloy', name: 'Alloy' },
+            { id: 'ash', name: 'Ash' },
+            { id: 'ballad', name: 'Ballad' },
+            { id: 'cedar', name: 'Cedar (recommended)' },
+            { id: 'coral', name: 'Coral' },
+            { id: 'echo', name: 'Echo' },
+            { id: 'fable', name: 'Fable' },
+            { id: 'marin', name: 'Marin (recommended)' },
+            { id: 'nova', name: 'Nova' },
+            { id: 'onyx', name: 'Onyx' },
+            { id: 'sage', name: 'Sage' },
+            { id: 'shimmer', name: 'Shimmer' },
+            { id: 'verse', name: 'Verse' },
+        ],
     },
 ];
 
 export const STT_PROVIDERS = [
     {
+        id: 'auto',
+        label: 'Auto (Recommended)',
+        // No catalogId/keyField on purpose — the UI hides the manual-provider controls (dropdown,
+        // library link, key toggle) for this entry. Matches how Retell AI itself works: ASR/STT is
+        // auto-routed by language for almost every agent, with manual provider choice tucked away
+        // as an advanced option rather than a mandatory peer of the Voice dropdown above.
+        description: "Picks the best transcription provider for this agent's language automatically, using whichever of your connected keys (Sarvam, Deepgram, AssemblyAI) fits best — falling back to Whisper. Nothing extra to configure here.",
+    },
+    {
         id: 'whisper',
         label: 'OpenAI Whisper',
-        catalogId: 'whisper',
-        catalogCategory: 'stt',
+        catalogId: 'openai',
+        catalogCategory: 'llm',
         keyField: 'openai_api_key',
+        sharedKeyNote: 'Uses the same OpenAI key as your LLM connection — nothing new to connect.',
         description: 'Simple, cheap, batch-only — good universal fallback.',
+        libraryUrl: 'https://platform.openai.com/docs/guides/speech-to-text',
     },
     {
         id: 'deepgram',
@@ -141,7 +243,9 @@ export const STT_PROVIDERS = [
         catalogId: 'deepgram',
         catalogCategory: 'stt',
         keyField: 'deepgram_api_key',
+        sharedKeyNote: 'This key also powers Deepgram Aura if you pick Deepgram for Voice/TTS.',
         description: 'Sub-300ms streaming transcription accuracy leader.',
+        libraryUrl: 'https://developers.deepgram.com/docs/models-languages-overview',
     },
     {
         id: 'assemblyai',
@@ -150,6 +254,7 @@ export const STT_PROVIDERS = [
         catalogCategory: 'stt',
         keyField: 'assemblyai_api_key',
         description: 'Best accuracy + speaker diarization / PII redaction.',
+        libraryUrl: 'https://www.assemblyai.com/docs/speech-to-text/pre-recorded-audio',
     },
     {
         id: 'sarvam',
@@ -157,18 +262,76 @@ export const STT_PROVIDERS = [
         catalogId: 'sarvam',
         catalogCategory: 'stt',
         keyField: 'sarvam_api_key',
+        sharedKeyNote: 'One Sarvam key covers LLM, Speech-to-Text and Text-to-Speech — connect it once, anywhere.',
         description: 'Best accuracy for Indian languages/accents.',
+        libraryUrl: 'https://docs.sarvam.ai/api/getting-started/models/saaras',
     },
 ];
 
 export const TELEPHONY_PROVIDERS = [
-    { id: 'twilio', label: 'Twilio', catalogId: 'twilio', supported: true, description: 'Best docs, global reach. Fully wired — supports buying a number below.' },
-    { id: 'exotel', label: 'Exotel', catalogId: 'exotel', supported: true, description: 'Required for India-compliant PSTN calling. Needs a one-time Voicebot Flow set up in your Exotel dashboard.' },
-    { id: 'telnyx', label: 'Telnyx', catalogId: 'telnyx', supported: false, description: 'Save your key in Integrations now — outbound calling support is coming soon.' },
-    { id: 'plivo', label: 'Plivo', catalogId: 'plivo', supported: false, description: 'Save your key in Integrations now — outbound calling support is coming soon.' },
-    { id: 'vonage', label: 'Vonage', catalogId: 'vonage', supported: false, description: 'Save your key in Integrations now — outbound calling support is coming soon.' },
+    {
+        id: 'twilio',
+        label: 'Twilio',
+        catalogId: 'twilio',
+        supported: true,
+        description: 'Best docs, global reach. Fully wired — supports buying a number below.',
+        setupUrl: 'https://console.twilio.com/',
+        setupLabel: 'Open Twilio Console',
+    },
+    {
+        id: 'exotel',
+        label: 'Exotel',
+        catalogId: 'exotel',
+        supported: true,
+        description: 'Required for India-compliant PSTN calling. Needs a one-time Voicebot Flow set up in your Exotel dashboard.',
+        setupUrl: 'https://my.exotel.com/',
+        setupLabel: 'Open Exotel Dashboard',
+        docsUrl: 'https://developer.exotel.com/docs/agentstream/stream-voicebot-applet',
+    },
+    {
+        id: 'telnyx',
+        label: 'Telnyx',
+        catalogId: 'telnyx',
+        supported: true,
+        description: 'Lowest per-minute cost, private backbone. Fully wired — one-time setup: create a Call Control Application in the Telnyx portal, then paste its Application ID as the Connection ID.',
+        setupUrl: 'https://portal.telnyx.com/#/app/call-control/applications',
+        setupLabel: 'Open Telnyx Portal',
+        docsUrl: 'https://developers.telnyx.com/docs/voice/programmable-voice/voice-api-fundamentals',
+    },
+    {
+        id: 'plivo',
+        label: 'Plivo',
+        catalogId: 'plivo',
+        supported: true,
+        description: "Cheapest easy migration if you already know Twilio's API shape. Fully wired — just save your Auth ID/Token and number below, no extra app setup needed.",
+        setupUrl: 'https://console.plivo.com/dashboard/',
+        setupLabel: 'Open Plivo Console',
+        docsUrl: 'https://plivo.com/docs/voice-agents/audio-streaming/overview',
+    },
+    {
+        id: 'vonage',
+        label: 'Vonage',
+        catalogId: 'vonage',
+        supported: true,
+        description: 'Best enterprise SLAs and EMEA/APAC coverage. Fully wired — one-time setup: create a Voice application in the Vonage dashboard, link your number to it, then paste the Application ID + its private key.',
+        setupUrl: 'https://dashboard.nexmo.com/applications',
+        setupLabel: 'Open Vonage Dashboard',
+        docsUrl: 'https://developer.vonage.com/en/voice/voice-api/guides/private-key',
+    },
 ];
 
 export function findProvider(list, id) {
     return list.find((p) => p.id === id) || list[0];
 }
+
+// Placeholder hint shown in the "My Own Key" input of the KeyToggle for each provider.
+export const KEY_PLACEHOLDER = {
+    openai_api_key: 'sk-proj-...',
+    anthropic_api_key: 'sk-ant-...',
+    gemini_api_key: 'AIza...',
+    elevenlabs_api_key: 'sk_...',
+    cartesia_api_key: 'Your Cartesia API key...',
+    assemblyai_api_key: 'Your AssemblyAI API key...',
+    deepgram_api_key: 'Your Deepgram API key...',
+    sarvam_api_key: 'Your Sarvam API key...',
+};

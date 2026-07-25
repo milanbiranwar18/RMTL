@@ -45,6 +45,8 @@ def create_call(db: Session, call: CallCreate, user_id: int = None):
         if result.get('success'):
             logger.info(f"Call initiated successfully: {result}")
             db_call.status = CallStatus.ACTIVE.value
+            if result.get('provider_call_sid'):
+                db_call.provider_call_sid = result['provider_call_sid']
         else:
             logger.error(f"{provider} call failed: {result.get('error')}")
             db_call.status = CallStatus.FAILED.value

@@ -10,6 +10,8 @@ For any other language, Sarvam isn't supported (it's an India-focused provider) 
 below falls back to Hindi rather than failing outright.
 """
 
+from typing import Optional
+
 INDIA_LANGUAGES = [
     {"code": "hi-IN", "name": "Hindi"},
     {"code": "en-IN", "name": "English (India)"},
@@ -70,3 +72,30 @@ def sarvam_code_for(code: str) -> str:
 
 def is_sarvam_compatible(code: str) -> bool:
     return code in _SARVAM_COMPATIBLE_CODES
+
+
+def resolve_language_input(value) -> Optional[str]:
+    """Best-effort match of free-form user input (typically a call-time dynamic variable, e.g.
+    `{"language": "Hindi"}` or `{"language": "ta-IN"}`) to one of our known language codes.
+
+    Tries, in order: exact code match -> exact display-name match -> bare name match (ignoring
+    the "(...)" region suffix, e.g. "English" matches "English (US)"). Returns None if nothing
+    matches, so callers can safely ignore garbage input instead of guessing wrong."""
+    if not value:
+        return None
+    text = str(value).strip()
+    if not text:
+        return None
+    lowered = text.lower()
+
+    for lang in _ALL_LANGUAGES:
+        if lang["code"].lower() == lowered:
+            return lang["code"]
+    for lang in _ALL_LANGUAGES:
+        if lang["name"].lower() == lowered:
+            return lang["code"]
+    for lang in _ALL_LANGUAGES:
+        bare_name = lang["name"].split("(")[0].strip().lower()
+        if bare_name == lowered:
+            return lang["code"]
+    return None

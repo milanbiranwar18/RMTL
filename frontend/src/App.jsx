@@ -3,6 +3,7 @@ import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-d
 import Layout from './components/Layout';
 import Dashboard from './pages/Dashboard';
 import Agents from './pages/Agents';
+import AgentNew from './pages/AgentNew';
 import CallHistory from './pages/CallHistory';
 import Workflows from './pages/Workflows';
 import WorkflowBuilder from './pages/WorkflowBuilder';
@@ -37,6 +38,7 @@ function AppRoutes() {
             <Routes>
               <Route path="/" element={<Dashboard />} />
               <Route path="/agents" element={<Agents />} />
+              <Route path="/agents/new" element={<AgentNew />} />
               <Route path="/agents/:agentId/settings" element={<AgentSettings />} />
               <Route path="/calls" element={<CallHistory />} />
               <Route path="/workflows" element={<Workflows />} />

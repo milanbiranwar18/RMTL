@@ -26,6 +26,17 @@ ELEVENLABS_VOICE_IDS = {
 }
 DEFAULT_ELEVENLABS_VOICE_ID = ELEVENLABS_VOICE_IDS["rachel"]
 
+# bulbul:v3 speaker catalog — per https://docs.sarvam.ai/api/getting-started/models/bulbul.
+# IMPORTANT: v2 speakers (anushka, manisha, vidya, arya, abhilash, karun, hitesh) are NOT
+# interchangeable with v3 — passing one with model="bulbul:v3" gets rejected by Sarvam's API.
+SARVAM_V3_SPEAKERS = {
+    "shubh", "aditya", "ritu", "priya", "neha", "rahul", "pooja", "rohan", "simran", "kavya",
+    "amit", "dev", "ishita", "shreya", "ratan", "varun", "manan", "sumit", "roopa", "kabir",
+    "aayan", "ashutosh", "advait", "anand", "tanya", "tarun", "sunny", "mani", "gokul", "vijay",
+    "shruti", "suhani", "mohit", "kavitha", "rehan", "soham", "rupali",
+}
+DEFAULT_SARVAM_SPEAKER = "shubh"
+
 
 class VoiceService:
     def __init__(self):
@@ -218,7 +229,7 @@ class VoiceService:
         self,
         text: str,
         language_code: str = "hi-IN",
-        speaker: str = "meera",
+        speaker: str = DEFAULT_SARVAM_SPEAKER,
         api_key: str = None
     ) -> str:
         """TTS via Sarvam AI with explicit language + speaker + api_key."""
@@ -227,11 +238,11 @@ class VoiceService:
             logger.warning("No Sarvam key for TTS — falling back to default TTS")
             return await self.generate_audio(text)
 
-        # Enforce valid Sarvam Indian speakers
-        valid_speakers = ["anushka", "abhilash", "manisha", "vidya", "arya", "karun", "hitesh", "aditya", "ritu", "priya", "neha", "rahul", "pooja", "rohan", "simran", "kavya", "amit", "dev", "ishita", "shreya", "ratan", "varun", "manan", "sumit", "roopa", "kabir", "aayan", "shubh", "ashutosh", "advait"]
-        if speaker.lower() not in valid_speakers:
-            logger.warning(f"Speaker '{speaker}' not recognized by Sarvam, defaulting to 'anushka'")
-            speaker = "anushka"
+        if not speaker or speaker.lower() not in SARVAM_V3_SPEAKERS:
+            logger.warning(f"Speaker '{speaker}' isn't a valid bulbul:v3 speaker — defaulting to '{DEFAULT_SARVAM_SPEAKER}'. Full list: {sorted(SARVAM_V3_SPEAKERS)}")
+            speaker = DEFAULT_SARVAM_SPEAKER
+        else:
+            speaker = speaker.lower()
         try:
             url = "https://api.sarvam.ai/text-to-speech"
             headers = {"api-subscription-key": key, "Content-Type": "application/json"}

@@ -55,6 +55,27 @@ def migrate_database(db_path='./app.db'):
         else:
             print("✓ 'user_id' column already exists on calls")
 
+        # Exotel's Voicebot Applet URL is static (configured once in the user's Exotel Flow),
+        # so we can't route by call_id in the URL like Twilio — we match the provider's own
+        # call_sid (captured synchronously from the Connect API response) against this column
+        # instead, once the applet's websocket connects. See services/telephony_service.py.
+        if 'provider_call_sid' not in call_columns:
+            print("Adding 'provider_call_sid' column to calls...")
+            cursor.execute("ALTER TABLE calls ADD COLUMN provider_call_sid VARCHAR")
+            print("✓ Added 'provider_call_sid' column to calls")
+        else:
+            print("✓ 'provider_call_sid' column already exists on calls")
+
+        # Agents now have an owner, so the Agents list/create/update endpoints can be scoped
+        # per-user (previously ANY logged-in user could see/edit ALL agents platform-wide) and so
+        # an agent's owner's Integrations vault can be used as a BYOK key fallback.
+        if 'user_id' not in columns:
+            print("Adding 'user_id' column to agents...")
+            cursor.execute("ALTER TABLE agents ADD COLUMN user_id INTEGER")
+            print("✓ Added 'user_id' column to agents")
+        else:
+            print("✓ 'user_id' column already exists on agents")
+
         conn.commit()
         print("\n✅ Database migration completed successfully!")
 
