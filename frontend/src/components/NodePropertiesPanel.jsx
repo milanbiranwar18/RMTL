@@ -1000,6 +1000,386 @@ const NodePropertiesPanel = ({ selectedNode, onUpdate, agents = [] }) => {
                     </div>
                 );
 
+            case 'wait_delay':
+                return (
+                    <>
+                        <div>
+                            <FieldLabel>Delay Duration (seconds)</FieldLabel>
+                            <input
+                                type="number"
+                                min="1"
+                                max="60"
+                                value={nodeData.delaySeconds || 2}
+                                onChange={(e) => setNodeData({ ...nodeData, delaySeconds: parseInt(e.target.value) || 2 })}
+                                placeholder="2"
+                                className="w-full p-2 rounded-md border border-input bg-background"
+                            />
+                            <p className="text-xs text-muted-foreground mt-1">
+                                Pause the workflow for this many seconds before continuing.
+                            </p>
+                        </div>
+                    </>
+                );
+
+            case 'set_variable':
+                return (
+                    <>
+                        <div>
+                            <FieldLabel>Variable Name</FieldLabel>
+                            <input
+                                type="text"
+                                value={nodeData.variableName || ''}
+                                onChange={(e) => setNodeData({ ...nodeData, variableName: e.target.value })}
+                                placeholder="e.g., user_name"
+                                className="w-full p-2 rounded-md border border-input bg-background"
+                            />
+                        </div>
+                        <div>
+                            <FieldLabel>Variable Value</FieldLabel>
+                            <input
+                                type="text"
+                                value={nodeData.variableValue || ''}
+                                onChange={(e) => setNodeData({ ...nodeData, variableValue: e.target.value })}
+                                placeholder="e.g., John Doe or {{existing_variable}}"
+                                className="w-full p-2 rounded-md border border-input bg-background"
+                            />
+                            <p className="text-xs text-muted-foreground mt-1">
+                                Use {`{{variable_name}}`} to reference existing variables.
+                            </p>
+                        </div>
+                    </>
+                );
+
+            case 'send_whatsapp':
+                return (
+                    <>
+                        <div>
+                            <FieldLabel>WhatsApp Provider</FieldLabel>
+                            <select
+                                value={nodeData.provider || 'twilio_whatsapp'}
+                                onChange={(e) => setNodeData({ ...nodeData, provider: e.target.value })}
+                                className="w-full p-2 rounded-md border border-input bg-background"
+                            >
+                                <option value="twilio_whatsapp">Twilio WhatsApp</option>
+                                <option value="exotel">Exotel WhatsApp</option>
+                                <option value="aisensy">AISENSY</option>
+                                <option value="gupshup">Gupshup</option>
+                                <option value="360dialog">360Dialog</option>
+                                <option value="interakt">Interakt</option>
+                            </select>
+                        </div>
+                        <div>
+                            <FieldLabel>Message Type</FieldLabel>
+                            <select
+                                value={nodeData.messageType || 'session'}
+                                onChange={(e) => setNodeData({ ...nodeData, messageType: e.target.value })}
+                                className="w-full p-2 rounded-md border border-input bg-background"
+                            >
+                                <option value="session">Session Message (free-form, 24hr window)</option>
+                                <option value="template">Template Message (pre-approved, anytime)</option>
+                            </select>
+                            <p className="text-xs text-muted-foreground mt-1">
+                                {nodeData.messageType === 'template' 
+                                    ? 'Template messages must be pre-approved by Meta. Use for business-initiated messages.'
+                                    : 'Session messages can be sent freely within 24 hours after user messages you first.'}
+                            </p>
+                        </div>
+                        <div>
+                            <FieldLabel>To Number (with country code)</FieldLabel>
+                            <input
+                                type="text"
+                                value={nodeData.toNumber || ''}
+                                onChange={(e) => setNodeData({ ...nodeData, toNumber: e.target.value })}
+                                placeholder="e.g., +919876543210 or {{phone_number}}"
+                                className="w-full p-2 rounded-md border border-input bg-background"
+                            />
+                        </div>
+                        
+                        {nodeData.messageType === 'template' ? (
+                            <>
+                                <div>
+                                    <FieldLabel>Template Name</FieldLabel>
+                                    <input
+                                        type="text"
+                                        value={nodeData.templateName || ''}
+                                        onChange={(e) => setNodeData({ ...nodeData, templateName: e.target.value })}
+                                        placeholder="e.g., order_confirmation"
+                                        className="w-full p-2 rounded-md border border-input bg-background"
+                                    />
+                                    <p className="text-xs text-muted-foreground mt-1">
+                                        Use the template name approved in your WhatsApp Business Manager.
+                                    </p>
+                                </div>
+                                <div>
+                                    <FieldLabel>Template Parameters (JSON)</FieldLabel>
+                                    <textarea
+                                        rows={3}
+                                        value={nodeData.templateParams || ''}
+                                        onChange={(e) => setNodeData({ ...nodeData, templateParams: e.target.value })}
+                                        placeholder='{"1": "John", "2": "Order #123"}'
+                                        className="w-full p-2 rounded-md border border-input bg-background font-mono text-xs"
+                                    />
+                                    <p className="text-xs text-muted-foreground mt-1">
+                                        Provide template variable values as JSON. Example: {`{"1": "{{user_name}}", "2": "{{order_id}}"}`}
+                                    </p>
+                                </div>
+                            </>
+                        ) : (
+                            <>
+                                <div>
+                                    <FieldLabel>Message</FieldLabel>
+                                    <textarea
+                                        rows={4}
+                                        value={nodeData.message || ''}
+                                        onChange={(e) => setNodeData({ ...nodeData, message: e.target.value })}
+                                        placeholder="Type your WhatsApp message..."
+                                        className="w-full p-2 rounded-md border border-input bg-background"
+                                    />
+                                </div>
+                                <div>
+                                    <FieldLabel>Media URL (optional)</FieldLabel>
+                                    <input
+                                        type="text"
+                                        value={nodeData.mediaUrl || ''}
+                                        onChange={(e) => setNodeData({ ...nodeData, mediaUrl: e.target.value })}
+                                        placeholder="https://example.com/image.jpg"
+                                        className="w-full p-2 rounded-md border border-input bg-background"
+                                    />
+                                    <p className="text-xs text-muted-foreground mt-1">
+                                        Send an image, document, or other media attachment.
+                                    </p>
+                                </div>
+                            </>
+                        )}
+                    </>
+                );
+
+            case 'send_sms':
+                return (
+                    <>
+                        <div>
+                            <FieldLabel>SMS Provider</FieldLabel>
+                            <select
+                                value={nodeData.provider || 'twilio'}
+                                onChange={(e) => setNodeData({ ...nodeData, provider: e.target.value })}
+                                className="w-full p-2 rounded-md border border-input bg-background"
+                            >
+                                <option value="twilio">Twilio</option>
+                                <option value="exotel">Exotel</option>
+                                <option value="plivo">Plivo</option>
+                            </select>
+                        </div>
+                        <div>
+                            <FieldLabel>To Number (with country code)</FieldLabel>
+                            <input
+                                type="text"
+                                value={nodeData.toNumber || ''}
+                                onChange={(e) => setNodeData({ ...nodeData, toNumber: e.target.value })}
+                                placeholder="e.g., +919876543210 or {{phone_number}}"
+                                className="w-full p-2 rounded-md border border-input bg-background"
+                            />
+                        </div>
+                        <div>
+                            <FieldLabel>Message</FieldLabel>
+                            <textarea
+                                rows={4}
+                                value={nodeData.message || ''}
+                                onChange={(e) => setNodeData({ ...nodeData, message: e.target.value })}
+                                placeholder="Type your SMS message..."
+                                className="w-full p-2 rounded-md border border-input bg-background"
+                            />
+                        </div>
+                    </>
+                );
+
+            case 'send_email':
+                return (
+                    <>
+                        <div>
+                            <FieldLabel>To Email</FieldLabel>
+                            <input
+                                type="email"
+                                value={nodeData.toEmail || ''}
+                                onChange={(e) => setNodeData({ ...nodeData, toEmail: e.target.value })}
+                                placeholder="e.g., user@example.com or {{email}}"
+                                className="w-full p-2 rounded-md border border-input bg-background"
+                            />
+                        </div>
+                        <div>
+                            <FieldLabel>Subject</FieldLabel>
+                            <input
+                                type="text"
+                                value={nodeData.subject || ''}
+                                onChange={(e) => setNodeData({ ...nodeData, subject: e.target.value })}
+                                placeholder="Email subject line..."
+                                className="w-full p-2 rounded-md border border-input bg-background"
+                            />
+                        </div>
+                        <div>
+                            <FieldLabel>Email Body</FieldLabel>
+                            <textarea
+                                rows={6}
+                                value={nodeData.body || ''}
+                                onChange={(e) => setNodeData({ ...nodeData, body: e.target.value })}
+                                placeholder="Type your email message..."
+                                className="w-full p-2 rounded-md border border-input bg-background"
+                            />
+                        </div>
+                        <div>
+                            <FieldLabel>From Email (optional)</FieldLabel>
+                            <input
+                                type="email"
+                                value={nodeData.fromEmail || ''}
+                                onChange={(e) => setNodeData({ ...nodeData, fromEmail: e.target.value })}
+                                placeholder="Leave blank to use default SMTP sender"
+                                className="w-full p-2 rounded-md border border-input bg-background"
+                            />
+                        </div>
+                    </>
+                );
+
+            case 'play_audio':
+                return (
+                    <>
+                        <div>
+                            <FieldLabel>Audio File URL</FieldLabel>
+                            <input
+                                type="text"
+                                value={nodeData.audioUrl || ''}
+                                onChange={(e) => setNodeData({ ...nodeData, audioUrl: e.target.value })}
+                                placeholder="https://example.com/audio.mp3"
+                                className="w-full p-2 rounded-md border border-input bg-background"
+                            />
+                            <p className="text-xs text-muted-foreground mt-1">
+                                Provide a publicly accessible URL to an audio file (MP3, WAV, etc.)
+                            </p>
+                        </div>
+                        <div>
+                            <FieldLabel>Fallback Text (for text-only testing)</FieldLabel>
+                            <input
+                                type="text"
+                                value={nodeData.fallbackText || ''}
+                                onChange={(e) => setNodeData({ ...nodeData, fallbackText: e.target.value })}
+                                placeholder="[Audio message]"
+                                className="w-full p-2 rounded-md border border-input bg-background"
+                            />
+                        </div>
+                    </>
+                );
+
+            case 'menu_ivr':
+                return (
+                    <>
+                        <div>
+                            <FieldLabel>Menu Prompt</FieldLabel>
+                            <textarea
+                                rows={3}
+                                value={nodeData.menuText || ''}
+                                onChange={(e) => setNodeData({ ...nodeData, menuText: e.target.value })}
+                                placeholder="Press 1 for Sales, 2 for Support..."
+                                className="w-full p-2 rounded-md border border-input bg-background"
+                            />
+                        </div>
+                        <div>
+                            <FieldLabel>Menu Options</FieldLabel>
+                            <p className="text-xs text-muted-foreground mb-2">
+                                Define DTMF options (digits 0-9, *, #) and their labels. Wire each option to different paths in the workflow.
+                            </p>
+                            {(nodeData.options || []).map((option, idx) => (
+                                <div key={idx} className="flex gap-2 mb-2">
+                                    <input
+                                        type="text"
+                                        value={option.digit || ''}
+                                        onChange={(e) => {
+                                            const opts = [...(nodeData.options || [])];
+                                            opts[idx] = { ...opts[idx], digit: e.target.value };
+                                            setNodeData({ ...nodeData, options: opts });
+                                        }}
+                                        placeholder="1"
+                                        maxLength={1}
+                                        className="w-16 p-2 rounded-md border border-input bg-background"
+                                    />
+                                    <input
+                                        type="text"
+                                        value={option.label || ''}
+                                        onChange={(e) => {
+                                            const opts = [...(nodeData.options || [])];
+                                            opts[idx] = { ...opts[idx], label: e.target.value };
+                                            setNodeData({ ...nodeData, options: opts });
+                                        }}
+                                        placeholder="Sales"
+                                        className="flex-1 p-2 rounded-md border border-input bg-background"
+                                    />
+                                    <button
+                                        type="button"
+                                        onClick={() => {
+                                            const opts = [...(nodeData.options || [])];
+                                            opts.splice(idx, 1);
+                                            setNodeData({ ...nodeData, options: opts });
+                                        }}
+                                        className="px-2 text-red-400 hover:text-red-300"
+                                    >
+                                        ×
+                                    </button>
+                                </div>
+                            ))}
+                            <button
+                                type="button"
+                                onClick={() => {
+                                    const opts = [...(nodeData.options || []), { digit: '', label: '' }];
+                                    setNodeData({ ...nodeData, options: opts });
+                                }}
+                                className="text-sm text-blue-400 hover:text-blue-300"
+                            >
+                                + Add Option
+                            </button>
+                        </div>
+                    </>
+                );
+
+            case 'collect_input':
+                return (
+                    <>
+                        <div>
+                            <FieldLabel>Prompt Text</FieldLabel>
+                            <textarea
+                                rows={2}
+                                value={nodeData.promptText || ''}
+                                onChange={(e) => setNodeData({ ...nodeData, promptText: e.target.value })}
+                                placeholder="Please provide your email address..."
+                                className="w-full p-2 rounded-md border border-input bg-background"
+                            />
+                        </div>
+                        <div>
+                            <FieldLabel>Input Type</FieldLabel>
+                            <select
+                                value={nodeData.inputType || 'text'}
+                                onChange={(e) => setNodeData({ ...nodeData, inputType: e.target.value })}
+                                className="w-full p-2 rounded-md border border-input bg-background"
+                            >
+                                <option value="text">Text</option>
+                                <option value="number">Number</option>
+                                <option value="email">Email</option>
+                                <option value="phone">Phone Number</option>
+                                <option value="date">Date</option>
+                            </select>
+                        </div>
+                        <div>
+                            <FieldLabel>Store As Variable</FieldLabel>
+                            <input
+                                type="text"
+                                value={nodeData.variableName || 'collected_input'}
+                                onChange={(e) => setNodeData({ ...nodeData, variableName: e.target.value })}
+                                placeholder="collected_input"
+                                className="w-full p-2 rounded-md border border-input bg-background"
+                            />
+                            <p className="text-xs text-muted-foreground mt-1">
+                                The collected input will be stored in this variable for use in later nodes.
+                            </p>
+                        </div>
+                    </>
+                );
+
             default:
                 return (
                     <div>

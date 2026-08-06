@@ -29,9 +29,14 @@ class Call(Base):
     # agent's prompt as `{{key}}`, plus the reserved `language` key overrides which language the
     # agent speaks for this call only. See services/dynamic_variables.py.
     dynamic_variables = Column(JSON, nullable=True)
+    conversation_history = Column(JSON, nullable=True)  # Full conversation: [{"role": "user"/"assistant", "content": "..."}]
     recording_url = Column(String, nullable=True)
-    transcript = Column(Text, nullable=True)
+    transcript = Column(Text, nullable=True)  # Formatted speaker-labeled transcript from Sarvam STT
+    summary = Column(Text, nullable=True)  # LLM-generated summary via Sarvam
+    sentiment = Column(String, nullable=True)  # positive/negative/neutral from LLM analysis
+    duration_seconds = Column(Integer, nullable=True)  # Actual call duration
     start_time = Column(DateTime(timezone=True), server_default=func.now())
     end_time = Column(DateTime(timezone=True), nullable=True)
 
     agent = relationship("Agent")
+    usage_records = relationship("UsageRecord", back_populates="call")

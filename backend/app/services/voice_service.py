@@ -250,9 +250,7 @@ class VoiceService:
                 "inputs": [text],
                 "target_language_code": language_code,
                 "speaker": speaker,
-                "pitch": 0,
                 "pace": 1.05,
-                "loudness": 1.5,
                 "speech_sample_rate": 8000,
                 "enable_preprocessing": True,
                 "model": "bulbul:v3"

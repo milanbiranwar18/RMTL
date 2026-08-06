@@ -22,8 +22,13 @@ class CallUpdate(BaseModel):
 class CallResponse(CallBase):
     id: int
     status: str
+    provider_call_sid: Optional[str] = None
+    conversation_history: Optional[list] = None  # Full conversation: [{"role": "user"/"assistant", "content": "..."}]
     recording_url: Optional[str] = None
-    transcript: Optional[str] = None
+    transcript: Optional[str] = None  # Formatted speaker-labeled transcript
+    summary: Optional[str] = None  # LLM-generated summary
+    sentiment: Optional[str] = None  # positive/negative/neutral
+    duration_seconds: Optional[int] = None  # Actual call duration
     start_time: datetime
     end_time: Optional[datetime] = None
 

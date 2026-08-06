@@ -14,9 +14,11 @@ import ReactFlow, {
     MarkerType,
 } from 'reactflow';
 import 'reactflow/dist/style.css';
+import dagre from 'dagre';
 import {
     Save, Play, MessageSquare, Zap, GitBranch, PhoneOff, Home,
     PhoneForwarded, Hash, GitFork, Users, MessageCircle, Variable, Code2, StickyNote, Webhook, PlugZap, Bot, Search,
+    Clock, Mail, Volume2, ListTree, Keyboard, Settings, Send, Smartphone, GitMerge, Network, Check, Loader2,
 } from 'lucide-react';
 import client from '../api/client';
 import BeginNode from '../components/nodes/BeginNode';
@@ -27,7 +29,8 @@ import LogicSplitNode from '../components/nodes/LogicSplitNode';
 import NoteNode from '../components/nodes/NoteNode';
 import {
     CallTransferNode, PressDigitNode, AgentTransferNode, InCallSmsNode, ExtractVariableNode, CodeNode, EndingNode,
-    CustomFunctionNode, McpToolCallNode,
+    CustomFunctionNode, McpToolCallNode, WaitDelayNode, SetVariableNode, SendWhatsAppNode, SendSmsNode, SendEmailNode,
+    PlayAudioNode, MenuIvrNode, CollectInputNode,
 } from '../components/nodes/ExtraNodes';
 import TestingPanel from '../components/TestingPanel';
 import FlowAssistantPanel from '../components/FlowAssistantPanel';
@@ -52,6 +55,15 @@ const nodeTypes = {
     mcp_tool_call: McpToolCallNode,
     ending: EndingNode,
     note: NoteNode,
+    // New nodes
+    wait_delay: WaitDelayNode,
+    set_variable: SetVariableNode,
+    send_whatsapp: SendWhatsAppNode,
+    send_sms: SendSmsNode,
+    send_email: SendEmailNode,
+    play_audio: PlayAudioNode,
+    menu_ivr: MenuIvrNode,
+    collect_input: CollectInputNode,
 };
 
 const edgeTypes = {
@@ -87,17 +99,25 @@ const DRAFT_AGENT_DEFAULTS = {
 
 const NODE_LIBRARY = [
     { type: 'dialogue', label: 'Conversation', icon: MessageSquare, color: 'text-sky-400', hover: 'hover:border-sky-500/60' },
+    { type: 'menu_ivr', label: 'Menu/IVR', icon: ListTree, color: 'text-green-400', hover: 'hover:border-green-500/60' },
+    { type: 'collect_input', label: 'Collect Input', icon: Keyboard, color: 'text-lime-400', hover: 'hover:border-lime-500/60' },
     { type: 'action', label: 'Action', icon: Zap, color: 'text-emerald-400', hover: 'hover:border-emerald-500/60' },
     { type: 'condition', label: 'Condition', icon: GitBranch, color: 'text-amber-400', hover: 'hover:border-amber-500/60' },
-    { type: 'call_transfer', label: 'Call Transfer', icon: PhoneForwarded, color: 'text-blue-400', hover: 'hover:border-blue-500/60' },
-    { type: 'press_digit', label: 'Press Digit', icon: Hash, color: 'text-purple-400', hover: 'hover:border-purple-500/60' },
     { type: 'logic_split', label: 'Logic Split', icon: GitFork, color: 'text-orange-400', hover: 'hover:border-orange-500/60' },
-    { type: 'agent_transfer', label: 'Agent Transfer', icon: Users, color: 'text-indigo-400', hover: 'hover:border-indigo-500/60' },
-    { type: 'in_call_sms', label: 'In-Call SMS', icon: MessageCircle, color: 'text-teal-400', hover: 'hover:border-teal-500/60' },
+    { type: 'wait_delay', label: 'Wait/Delay', icon: Clock, color: 'text-gray-400', hover: 'hover:border-gray-500/60' },
+    { type: 'set_variable', label: 'Set Variable', icon: Settings, color: 'text-fuchsia-400', hover: 'hover:border-fuchsia-500/60' },
     { type: 'extract_variable', label: 'Extract Variable', icon: Variable, color: 'text-cyan-400', hover: 'hover:border-cyan-500/60' },
     { type: 'code', label: 'Code', icon: Code2, color: 'text-slate-400', hover: 'hover:border-slate-500/60' },
     { type: 'custom_function', label: 'Function', icon: Webhook, color: 'text-pink-400', hover: 'hover:border-pink-500/60' },
     { type: 'mcp_tool_call', label: 'MCP Tool', icon: PlugZap, color: 'text-violet-400', hover: 'hover:border-violet-500/60' },
+    { type: 'send_whatsapp', label: 'Send WhatsApp', icon: Send, color: 'text-green-500', hover: 'hover:border-green-600/60' },
+    { type: 'send_sms', label: 'Send SMS', icon: Smartphone, color: 'text-blue-500', hover: 'hover:border-blue-600/60' },
+    { type: 'send_email', label: 'Send Email', icon: Mail, color: 'text-red-400', hover: 'hover:border-red-500/60' },
+    { type: 'play_audio', label: 'Play Audio', icon: Volume2, color: 'text-purple-500', hover: 'hover:border-purple-600/60' },
+    { type: 'call_transfer', label: 'Call Transfer', icon: PhoneForwarded, color: 'text-blue-400', hover: 'hover:border-blue-500/60' },
+    { type: 'press_digit', label: 'Press Digit', icon: Hash, color: 'text-purple-400', hover: 'hover:border-purple-500/60' },
+    { type: 'agent_transfer', label: 'Agent Transfer', icon: Users, color: 'text-indigo-400', hover: 'hover:border-indigo-500/60' },
+    { type: 'in_call_sms', label: 'In-Call SMS', icon: MessageCircle, color: 'text-teal-400', hover: 'hover:border-teal-500/60' },
     { type: 'ending', label: 'Ending', icon: PhoneOff, color: 'text-rose-400', hover: 'hover:border-rose-500/60' },
     { type: 'note', label: 'Note', icon: StickyNote, color: 'text-yellow-400', hover: 'hover:border-yellow-500/60' },
 ];
@@ -130,7 +150,10 @@ const WorkflowBuilder = () => {
     const [activeNodeId, setActiveNodeId] = useState(null);
     const [currentAgent, setCurrentAgent] = useState(null);
     const [reactFlowInstance, setReactFlowInstance] = useState(null);
+    const [edgeStyle, setEdgeStyle] = useState('smoothstep'); // 'straight', 'smoothstep', 'default'
+    const [saveStatus, setSaveStatus] = useState('saved'); // 'saved', 'saving', 'unsaved'
     const reactFlowWrapper = useRef(null);
+    const autoSaveTimerRef = useRef(null);
 
     useEffect(() => {
         fetchAgents();
@@ -509,8 +532,113 @@ const WorkflowBuilder = () => {
         setSelectedEdge(null);
     };
 
+    // Auto-layout function using dagre for automatic graph organization
+    const autoLayoutNodes = useCallback(() => {
+        const dagreGraph = new dagre.graphlib.Graph();
+        dagreGraph.setDefaultEdgeLabel(() => ({}));
+        
+        // Configure layout direction and spacing
+        dagreGraph.setGraph({ 
+            rankdir: 'LR',  // Left to Right
+            nodesep: 100,   // Horizontal spacing between nodes
+            ranksep: 150,   // Vertical spacing between ranks/levels
+            edgesep: 50,
+        });
+
+        // Add nodes to the graph
+        nodes.forEach((node) => {
+            dagreGraph.setNode(node.id, { 
+                width: node.type === 'begin' ? 100 : 200, 
+                height: node.type === 'begin' ? 60 : 100 
+            });
+        });
+
+        // Add edges to the graph
+        edges.forEach((edge) => {
+            dagreGraph.setEdge(edge.source, edge.target);
+        });
+
+        // Calculate layout
+        dagre.layout(dagreGraph);
+
+        // Apply new positions to nodes
+        const layoutedNodes = nodes.map((node) => {
+            const nodeWithPosition = dagreGraph.node(node.id);
+            return {
+                ...node,
+                position: {
+                    x: nodeWithPosition.x - (node.type === 'begin' ? 50 : 100),
+                    y: nodeWithPosition.y - (node.type === 'begin' ? 30 : 50),
+                },
+            };
+        });
+
+        setNodes(layoutedNodes);
+        
+        // Fit view after layout
+        if (reactFlowInstance) {
+            setTimeout(() => {
+                reactFlowInstance.fitView({ padding: 0.2, duration: 400 });
+            }, 50);
+        }
+    }, [nodes, edges, setNodes, reactFlowInstance]);
+
+    // Auto-save function with debouncing (saves 2 seconds after last change)
+    const triggerAutoSave = useCallback(() => {
+        // Clear existing timer
+        if (autoSaveTimerRef.current) {
+            clearTimeout(autoSaveTimerRef.current);
+        }
+
+        // Mark as unsaved
+        setSaveStatus('unsaved');
+
+        // Set new timer
+        autoSaveTimerRef.current = setTimeout(async () => {
+            // Don't auto-save if there's no workflow ID yet (first save should be manual)
+            if (!currentWorkflowId) {
+                return;
+            }
+
+            setSaveStatus('saving');
+            try {
+                const agentId = await ensureAgent();
+                const workflowData = {
+                    name: workflowName,
+                    agent_id: agentId,
+                    nodes: nodes,
+                    edges: edges,
+                };
+
+                await client.put(`/workflows/${currentWorkflowId}`, workflowData);
+                setSaveStatus('saved');
+            } catch (error) {
+                console.error('Auto-save failed:', error);
+                setSaveStatus('unsaved');
+            }
+        }, 2000); // 2 second debounce
+    }, [currentWorkflowId, workflowName, nodes, edges]);
+
+    // Trigger auto-save when nodes or edges change
+    useEffect(() => {
+        if (nodes.length > 0 || edges.length > 0) {
+            triggerAutoSave();
+        }
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [nodes, edges, workflowName]);
+
+    // Cleanup timer on unmount
+    useEffect(() => {
+        return () => {
+            if (autoSaveTimerRef.current) {
+                clearTimeout(autoSaveTimerRef.current);
+            }
+        };
+    }, []);
+
     const saveWorkflow = async () => {
         setSaving(true);
+        setSaveStatus('saving');
         try {
             // If the flow was designed with nothing selected, this is the moment its agent
             // actually gets created — using whatever's been set in the Agent Settings panel
@@ -535,9 +663,14 @@ const WorkflowBuilder = () => {
                 navigate(`/workflows/${response.data.id}`, { replace: true });
             }
 
-            alert('Workflow saved successfully!');
+            setSaveStatus('saved');
+            // Only show alert for manual saves (not auto-saves)
+            if (!autoSaveTimerRef.current) {
+                alert('Workflow saved successfully!');
+            }
         } catch (error) {
             console.error('Failed to save workflow:', error);
+            setSaveStatus('unsaved');
             alert('Failed to save workflow');
         } finally {
             setSaving(false);
@@ -637,19 +770,78 @@ const WorkflowBuilder = () => {
 
                         <div className="flex items-center gap-1.5 shrink-0">
                             <ThemeToggle />
+                            <div className="relative group">
+                                <select
+                                    value={edgeStyle}
+                                    onChange={(e) => {
+                                        const newStyle = e.target.value;
+                                        setEdgeStyle(newStyle);
+                                        // Update all existing edges to use the new style
+                                        setEdges((eds) =>
+                                            eds.map((edge) => ({
+                                                ...edge,
+                                                type: newStyle === 'straight' || newStyle === 'smoothstep' ? newStyle : 'custom',
+                                            }))
+                                        );
+                                    }}
+                                    className="h-9 pl-2 pr-8 rounded-md border border-input bg-background text-xs appearance-none cursor-pointer hover:bg-accent/50 transition-colors"
+                                    title="Connection Style"
+                                >
+                                    <option value="straight">Straight</option>
+                                    <option value="smoothstep">Smart Step</option>
+                                    <option value="default">Smooth Curve</option>
+                                </select>
+                                <GitMerge className="w-3.5 h-3.5 absolute right-2 top-1/2 -translate-y-1/2 pointer-events-none text-muted-foreground" />
+                            </div>
+                            {/* Auto-save status indicator or manual Save button for first save */}
+                            {!currentWorkflowId ? (
+                                <button
+                                    type="button"
+                                    onClick={saveWorkflow}
+                                    disabled={saving}
+                                    className="h-9 flex items-center gap-1.5 px-3 bg-primary text-primary-foreground text-xs font-medium rounded-md hover:bg-primary/90 disabled:opacity-50"
+                                >
+                                    <Save className="w-4 h-4" />
+                                    <span className="hidden xl:inline">{saving ? 'Saving...' : 'Save'}</span>
+                                </button>
+                            ) : (
+                                <div className="flex items-center gap-1.5 px-3 h-9 rounded-md border border-border bg-background/50 text-xs">
+                                    {saveStatus === 'saved' && (
+                                        <>
+                                            <Check className="w-3.5 h-3.5 text-green-500" />
+                                            <span className="text-muted-foreground hidden xl:inline">Saved</span>
+                                        </>
+                                    )}
+                                    {saveStatus === 'saving' && (
+                                        <>
+                                            <Loader2 className="w-3.5 h-3.5 text-blue-500 animate-spin" />
+                                            <span className="text-muted-foreground hidden xl:inline">Saving...</span>
+                                        </>
+                                    )}
+                                    {saveStatus === 'unsaved' && (
+                                        <>
+                                            <div className="w-2 h-2 rounded-full bg-orange-500" />
+                                            <span className="text-muted-foreground hidden xl:inline">Unsaved</span>
+                                        </>
+                                    )}
+                                </div>
+                            )}
+                            
+                            {/* Organize Layout button */}
                             <button
                                 type="button"
-                                onClick={saveWorkflow}
-                                disabled={saving}
-                                className="h-9 flex items-center gap-1.5 px-3 bg-primary text-primary-foreground text-xs font-medium rounded-md hover:bg-primary/90 disabled:opacity-50"
+                                onClick={autoLayoutNodes}
+                                className="h-9 flex items-center gap-1.5 px-3 border border-border bg-background text-xs font-medium rounded-md hover:bg-accent transition-colors"
+                                title="Auto-organize workflow layout"
                             >
-                                <Save className="w-4 h-4" />
-                                <span className="hidden xl:inline">{saving ? 'Saving...' : 'Save'}</span>
+                                <Network className="w-4 h-4" />
+                                <span className="hidden xl:inline">Organize</span>
                             </button>
+                            
                             <button
                                 type="button"
                                 onClick={async () => {
-                                    // Auto-save before testing if not saved
+                                    // Ensure workflow is saved before testing
                                     if (!currentWorkflowId) {
                                         await saveWorkflow();
                                         setTimeout(() => setShowTesting(true), 500);
@@ -690,7 +882,10 @@ const WorkflowBuilder = () => {
                             onInit={setReactFlowInstance}
                             fitView
                             fitViewOptions={{ padding: 0.3, maxZoom: 1 }}
-                            defaultEdgeOptions={{ type: 'custom', markerEnd: { type: MarkerType.ArrowClosed } }}
+                            defaultEdgeOptions={{
+                                type: edgeStyle === 'straight' || edgeStyle === 'smoothstep' ? edgeStyle : 'custom',
+                                markerEnd: { type: MarkerType.ArrowClosed },
+                            }}
                         >
                             <Controls position="bottom-left" />
                             <MiniMap

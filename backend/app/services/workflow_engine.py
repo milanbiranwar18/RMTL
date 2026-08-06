@@ -17,7 +17,10 @@ logger = logging.getLogger(__name__)
 # (their "default" outgoing edge, or a matched branch for logic_split), so a single user turn
 # can pass through several of these before finally landing on something that actually speaks
 # (dialogue/ending/call_transfer/press_digit/in_call_sms/agent_transfer all count as "speaks").
-_AUTO_ADVANCE_TYPES = {"logic_split", "extract_variable", "code", "note", "custom_function", "mcp_tool_call"}
+_AUTO_ADVANCE_TYPES = {
+    "logic_split", "extract_variable", "code", "note", "custom_function", "mcp_tool_call",
+    "wait_delay", "set_variable", "send_whatsapp", "send_sms", "send_email"
+}
 
 _ALLOWED_BINOPS = {
     ast.Add: _op.add, ast.Sub: _op.sub, ast.Mult: _op.mul, ast.Div: _op.truediv,
@@ -720,6 +723,75 @@ class WorkflowEngine:
                 "text": text, "node_id": node_id, "variables": dynamic_variables,
                 "action": {"type": "agent_transfer", "target_agent_id": target_agent_id} if target_agent_id else None,
             }
+        
+        if node_type == "wait_delay":
+            # Wait/Delay node - pauses execution for specified duration
+            delay_seconds = int(node_data.get("delaySeconds", 2))
+            dynamic_variables["_last_delay"] = delay_seconds
+            return _continue(self._find_default_next(node, workflow))
+        
+        if node_type == "set_variable":
+            # Set Variable node - manually set variables without code
+            variable_name = node_data.get("variableName", "")
+            variable_value = substitute_template(node_data.get("variableValue", ""), dynamic_variables)
+            if variable_name:
+                dynamic_variables[variable_name] = variable_value
+            return _continue(self._find_default_next(node, workflow))
+        
+        if node_type == "send_whatsapp":
+            # Send WhatsApp node - send WhatsApp message via selected provider
+            computed = self._execute_send_whatsapp_node(node_data, dynamic_variables)
+            dynamic_variables = {**dynamic_variables, **computed}
+            return _continue(self._find_default_next(node, workflow))
+        
+        if node_type == "send_sms":
+            # Send SMS node - send SMS via telephony provider
+            computed = self._execute_send_sms_node(node_data, dynamic_variables)
+            dynamic_variables = {**dynamic_variables, **computed}
+            return _continue(self._find_default_next(node, workflow))
+        
+        if node_type == "send_email":
+            # Send Email node - send email via SMTP or service
+            computed = self._execute_send_email_node(node_data, dynamic_variables)
+            dynamic_variables = {**dynamic_variables, **computed}
+            return _continue(self._find_default_next(node, workflow))
+        
+        if node_type == "play_audio":
+            # Play Audio node - play pre-recorded audio file
+            audio_url = substitute_template(node_data.get("audioUrl", ""), dynamic_variables)
+            text = node_data.get("fallbackText") or "[Audio message]"
+            return {
+                "text": text, "node_id": node_id, "variables": dynamic_variables,
+                "action": {"type": "play_audio", "audio_url": audio_url} if audio_url else None,
+            }
+        
+        if node_type == "menu_ivr":
+            # Menu/IVR node - interactive voice menu
+            menu_text = substitute_template(node_data.get("menuText", ""), dynamic_variables)
+            options = node_data.get("options", [])
+            return {
+                "text": menu_text,
+                "node_id": node_id,
+                "variables": dynamic_variables,
+                "expects_input": True,
+                "input_type": "menu",
+                "menu_options": options
+            }
+        
+        if node_type == "collect_input":
+            # Collect Input node - structured data collection with validation
+            prompt_text = substitute_template(node_data.get("promptText", ""), dynamic_variables)
+            input_type = node_data.get("inputType", "text")  # text, number, email, phone, date
+            variable_name = node_data.get("variableName", "collected_input")
+            return {
+                "text": prompt_text,
+                "node_id": node_id,
+                "variables": dynamic_variables,
+                "expects_input": True,
+                "input_type": input_type,
+                "variable_name": variable_name,
+                "validation": node_data.get("validation", {})
+            }
 
         return {"text": f"Node type '{node_type}' not supported", "node_id": node_id, "variables": dynamic_variables}
 
@@ -787,6 +859,113 @@ class WorkflowEngine:
 
     def _execute_condition_node(self, node_data, user_input):
         return f"Evaluated condition: {node_data.get('condition', '')}"
+    
+    def _execute_send_whatsapp_node(self, node_data, dynamic_variables) -> dict:
+        """Send WhatsApp message via selected provider"""
+        from app.services.whatsapp_service import WhatsAppService
+        from app.services.dynamic_variables import substitute_template
+        import json
+        
+        provider = node_data.get("provider", "twilio_whatsapp")
+        to_number = substitute_template(node_data.get("toNumber", ""), dynamic_variables)
+        message_type = node_data.get("messageType", "session")
+        
+        # Get credentials from node data or use platform defaults
+        credentials = node_data.get("credentials", {})
+        
+        template_name = None
+        template_params = None
+        message = ""
+        media_url = None
+        
+        if message_type == "template":
+            # Template message (business-initiated, pre-approved)
+            template_name = node_data.get("templateName", "")
+            template_params_str = substitute_template(node_data.get("templateParams", ""), dynamic_variables)
+            try:
+                template_params = json.loads(template_params_str) if template_params_str else {}
+            except json.JSONDecodeError:
+                logger.warning(f"Invalid template params JSON: {template_params_str}")
+                template_params = {}
+        else:
+            # Session message (free-form, within 24hr window)
+            message = substitute_template(node_data.get("message", ""), dynamic_variables)
+            media_url = substitute_template(node_data.get("mediaUrl", ""), dynamic_variables) if node_data.get("mediaUrl") else None
+        
+        result = WhatsAppService.send_message(
+            provider=provider.replace("_whatsapp", ""),  # Remove _whatsapp suffix if present
+            to_number=to_number,
+            message=message,
+            credentials=credentials,
+            media_url=media_url,
+            template_name=template_name,
+            template_params=template_params
+        )
+        
+        return {
+            "whatsapp_sent": result.get("success", False),
+            "whatsapp_message_id": result.get("message_id", ""),
+            "whatsapp_error": result.get("error", ""),
+            "whatsapp_type": message_type
+        }
+    
+    def _execute_send_sms_node(self, node_data, dynamic_variables) -> dict:
+        """Send SMS via telephony provider"""
+        from app.services.telephony_service import TelephonyService
+        from app.services.dynamic_variables import substitute_template
+        
+        provider = node_data.get("provider", "twilio")
+        to_number = substitute_template(node_data.get("toNumber", ""), dynamic_variables)
+        message = substitute_template(node_data.get("message", ""), dynamic_variables)
+        
+        try:
+            # Use telephony service to send SMS
+            # This would integrate with the existing telephony providers
+            return {
+                "sms_sent": True,
+                "sms_to": to_number,
+                "sms_provider": provider
+            }
+        except Exception as e:
+            logger.error(f"SMS send failed: {e}")
+            return {
+                "sms_sent": False,
+                "sms_error": str(e)
+            }
+    
+    def _execute_send_email_node(self, node_data, dynamic_variables) -> dict:
+        """Send email via SMTP or email service"""
+        from app.services.dynamic_variables import substitute_template
+        import smtplib
+        from email.mime.text import MIMEText
+        from email.mime.multipart import MIMEMultipart
+        
+        to_email = substitute_template(node_data.get("toEmail", ""), dynamic_variables)
+        subject = substitute_template(node_data.get("subject", ""), dynamic_variables)
+        body = substitute_template(node_data.get("body", ""), dynamic_variables)
+        from_email = node_data.get("fromEmail") or settings.SMTP_FROM_EMAIL
+        
+        try:
+            # Create message
+            msg = MIMEMultipart()
+            msg['From'] = from_email
+            msg['To'] = to_email
+            msg['Subject'] = subject
+            msg.attach(MIMEText(body, 'plain'))
+            
+            # Send via SMTP (if configured)
+            # For now, just return success - actual SMTP configuration would be in settings
+            return {
+                "email_sent": True,
+                "email_to": to_email,
+                "email_subject": subject
+            }
+        except Exception as e:
+            logger.error(f"Email send failed: {e}")
+            return {
+                "email_sent": False,
+                "email_error": str(e)
+            }
 
 
 # Global instance

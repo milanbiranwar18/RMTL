@@ -10,7 +10,9 @@ import WorkflowBuilder from './pages/WorkflowBuilder';
 import AgentSettings from './pages/AgentSettings';
 import Analytics from './pages/Analytics';
 import Integrations from './pages/Integrations';
-import Login from './pages/Login';
+import UsageCosts from './pages/UsageCosts';
+import Landing from './pages/Landing';
+import Login from './pages/LoginEnhanced';  // Using enhanced login with OTP and OAuth
 import Register from './pages/Register';
 
 import { ThemeProvider } from './context/ThemeContext';
@@ -28,15 +30,16 @@ function AppRoutes() {
   return (
     <Routes>
       {/* Public routes */}
-      <Route path="/login" element={isAuthenticated ? <Navigate to="/" replace /> : <Login />} />
-      <Route path="/register" element={isAuthenticated ? <Navigate to="/" replace /> : <Register />} />
+      <Route path="/" element={isAuthenticated ? <Navigate to="/dashboard" replace /> : <Landing />} />
+      <Route path="/login" element={isAuthenticated ? <Navigate to="/dashboard" replace /> : <Login />} />
+      <Route path="/register" element={isAuthenticated ? <Navigate to="/dashboard" replace /> : <Register />} />
 
       {/* Protected routes wrapped in Layout */}
       <Route path="/*" element={
         <ProtectedRoute>
           <Layout>
             <Routes>
-              <Route path="/" element={<Dashboard />} />
+              <Route path="/dashboard" element={<Dashboard />} />
               <Route path="/agents" element={<Agents />} />
               <Route path="/agents/new" element={<AgentNew />} />
               <Route path="/agents/:agentId/settings" element={<AgentSettings />} />
@@ -46,6 +49,7 @@ function AppRoutes() {
               <Route path="/workflows/:workflowId" element={<WorkflowBuilder />} />
               <Route path="/analytics" element={<Analytics />} />
               <Route path="/integrations" element={<Integrations />} />
+              <Route path="/usage" element={<UsageCosts />} />
             </Routes>
           </Layout>
         </ProtectedRoute>

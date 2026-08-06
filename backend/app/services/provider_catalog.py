@@ -207,4 +207,73 @@ PROVIDER_CATALOG = {
             ],
         },
     ],
+    "whatsapp": [
+        {
+            "id": "twilio_whatsapp",
+            "name": "Twilio WhatsApp",
+            "recommended": True,
+            "description": "Easiest to start — free sandbox for testing, production-ready with business verification. Uses same Twilio account as voice calling.",
+            "docs_url": "https://console.twilio.com/us1/develop/sms/try-it-out/whatsapp-learn",
+            "fields": [
+                {"key": "account_sid", "label": "Account SID", "type": "text"},
+                {"key": "auth_token", "label": "Auth Token", "type": "password"},
+                {"key": "from_number", "label": "WhatsApp Number (e.g., +14155238886 for sandbox)", "type": "text"},
+            ],
+        },
+        {
+            "id": "exotel_whatsapp",
+            "name": "Exotel WhatsApp",
+            "recommended": True,
+            "description": "India-focused WhatsApp Business API provider. Good for businesses operating in India with local support. Supports templates and session messages.",
+            "docs_url": "https://developer.exotel.com/api/whatsapp",
+            "fields": [
+                {"key": "api_key", "label": "API Key", "type": "text"},
+                {"key": "api_token", "label": "API Token", "type": "password"},
+                {"key": "account_sid", "label": "Account SID", "type": "text"},
+                {"key": "subdomain", "label": "API Subdomain", "type": "text"},
+                {"key": "from_number", "label": "WhatsApp Number", "type": "text"},
+            ],
+        },
+        {
+            "id": "aisensy",
+            "name": "AISENSY",
+            "recommended": True,
+            "description": "Popular in India — quick setup, competitive pricing, good for marketing campaigns. Best for businesses targeting Indian customers.",
+            "docs_url": "https://www.aisensy.com/",
+            "fields": [
+                {"key": "api_key", "label": "API Key", "type": "password"},
+            ],
+        },
+        {
+            "id": "gupshup",
+            "name": "Gupshup",
+            "recommended": False,
+            "description": "Global reach, enterprise-grade reliability. Good for high-volume messaging across multiple countries.",
+            "docs_url": "https://www.gupshup.io/developer/home",
+            "fields": [
+                {"key": "api_key", "label": "API Key", "type": "password"},
+                {"key": "app_name", "label": "App Name", "type": "text"},
+            ],
+        },
+        {
+            "id": "360dialog",
+            "name": "360Dialog",
+            "recommended": False,
+            "description": "Official WhatsApp Business Solution Provider — direct Meta partnership, all WhatsApp features supported.",
+            "docs_url": "https://www.360dialog.com/",
+            "fields": [
+                {"key": "api_key", "label": "API Key (D360-API-KEY)", "type": "password"},
+            ],
+        },
+        {
+            "id": "interakt",
+            "name": "Interakt",
+            "recommended": False,
+            "description": "India-focused platform with easy integration and competitive pricing. Good for small to medium businesses.",
+            "docs_url": "https://www.interakt.shop/",
+            "fields": [
+                {"key": "api_key", "label": "API Key (Basic Auth)", "type": "password"},
+            ],
+        },
+    ],
 }

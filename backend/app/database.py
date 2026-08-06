@@ -3,17 +3,18 @@ from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import sessionmaker
 from app.config import settings
 
-SQLALCHEMY_DATABASE_URL = settings.DATABASE_URL
+from pathlib import Path
 
-# Swapping DATABASE_URL to a Postgres URL (e.g. Neon's `postgresql://...?sslmode=require`) is the
-# *only* code change needed to move off SQLite — psycopg2 is already in requirements.txt, and
-# `Base.metadata.create_all()` (main.py) builds the full schema on first startup against
-# whichever database this points to. The two engine options below only matter for that switch:
-# - `pool_pre_ping=True`: serverless Postgres (Neon included) can silently close idle
-#   connections; without this, the *next* query on a stale connection fails outright instead of
-#   SQLAlchemy transparently reconnecting first. Harmless no-op for SQLite.
-# - `check_same_thread=False`: SQLite-only — FastAPI's sync route handlers each run in their own
-#   worker thread, and SQLite's default same-thread check would otherwise reject that.
+# Ensure relative SQLite paths always resolve to backend/app.db regardless of CWD
+db_url = settings.DATABASE_URL
+if db_url.startswith("sqlite:///") and not db_url.startswith("sqlite:////"):
+    rel_path = db_url.replace("sqlite:///", "")
+    backend_dir = Path(__file__).resolve().parent.parent
+    abs_db_path = (backend_dir / rel_path).resolve()
+    db_url = f"sqlite:///{abs_db_path}"
+
+SQLALCHEMY_DATABASE_URL = db_url
+
 _connect_args = {"check_same_thread": False} if SQLALCHEMY_DATABASE_URL.startswith("sqlite") else {}
 engine = create_engine(SQLALCHEMY_DATABASE_URL, pool_pre_ping=True, connect_args=_connect_args)
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)

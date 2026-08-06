@@ -185,6 +185,14 @@ async def _run_voice_turn_loop(
     audio_buffer = bytearray()
     stream_sid = None
     state = _WorkflowState(db, agent, initial_variables)
+    
+    # Store conversation history in the Call record as we go — persisted immediately on every turn
+    # so if the websocket drops mid-call, we don't lose the entire conversation. The final
+    # _finalize_call call will read this back to generate the summary.
+    def persist_conversation():
+        if db_call and conversation_history:
+            db_call.conversation_history = conversation_history
+            db.commit()
 
     async def send_audio(audio_base64: str):
         if not audio_base64:
@@ -223,6 +231,9 @@ async def _run_voice_turn_loop(
                     conversation_history.append({"role": "user", "content": transcript})
                     llm_reply, ended, action = _generate_turn_reply(agent, transcript, conversation_history, state)
                     conversation_history.append({"role": "assistant", "content": llm_reply})
+                    
+                    # Persist conversation after each turn (so we don't lose it if connection drops)
+                    persist_conversation()
 
                     await send_audio(await voice_pipeline.synthesize(agent, llm_reply))
 
@@ -243,6 +254,8 @@ async def _run_voice_turn_loop(
         elif event == 'stop':
             logger.info(f"{call_label} stream stopped")
             break
+    
+    return conversation_history
 
 
 async def _run_plivo_turn_loop(websocket: WebSocket, call_label: str, agent, db: Session, db_call, initial_variables: dict = None):
@@ -253,6 +266,11 @@ async def _run_plivo_turn_loop(websocket: WebSocket, call_label: str, agent, db:
     conversation_history = []
     audio_buffer = bytearray()
     state = _WorkflowState(db, agent, initial_variables)
+    
+    def persist_conversation():
+        if db_call and conversation_history:
+            db_call.conversation_history = conversation_history
+            db.commit()
 
     async def send_audio(audio_base64: str):
         if not audio_base64:
@@ -285,6 +303,9 @@ async def _run_plivo_turn_loop(websocket: WebSocket, call_label: str, agent, db:
                     conversation_history.append({"role": "user", "content": transcript})
                     llm_reply, ended, action = _generate_turn_reply(agent, transcript, conversation_history, state)
                     conversation_history.append({"role": "assistant", "content": llm_reply})
+                    
+                    # Persist conversation after each turn
+                    persist_conversation()
 
                     await send_audio(await voice_pipeline.synthesize(agent, llm_reply))
 
@@ -304,6 +325,8 @@ async def _run_plivo_turn_loop(websocket: WebSocket, call_label: str, agent, db:
         elif event == 'stop':
             logger.info(f"{call_label} stream stopped")
             break
+    
+    return conversation_history
 
 
 async def _run_vonage_turn_loop(websocket: WebSocket, call_label: str, agent, db: Session, db_call, initial_variables: dict = None):
@@ -315,6 +338,11 @@ async def _run_vonage_turn_loop(websocket: WebSocket, call_label: str, agent, db
     audio_buffer = bytearray()
     state = _WorkflowState(db, agent, initial_variables)
     logger.info(f"{call_label} stream started | agent={agent.name if agent else 'none'}")
+    
+    def persist_conversation():
+        if db_call and conversation_history:
+            db_call.conversation_history = conversation_history
+            db.commit()
 
     async def send_audio(audio_base64: str):
         if not audio_base64:
@@ -336,6 +364,9 @@ async def _run_vonage_turn_loop(websocket: WebSocket, call_label: str, agent, db
                 conversation_history.append({"role": "user", "content": transcript})
                 llm_reply, ended, action = _generate_turn_reply(agent, transcript, conversation_history, state)
                 conversation_history.append({"role": "assistant", "content": llm_reply})
+                
+                # Persist conversation after each turn
+                persist_conversation()
 
                 await send_audio(await voice_pipeline.synthesize(agent, llm_reply))
 
@@ -354,11 +385,46 @@ async def _run_vonage_turn_loop(websocket: WebSocket, call_label: str, agent, db
 
 
 async def _finalize_call(db: Session, call_id: int):
-    """POST-call bookkeeping: mark the Call completed and fire its webhook (Agent's or
-    Call's own), shared by every provider's stream handler."""
+    """POST-call bookkeeping: mark the Call completed, generate analytics (transcript + summary),
+    and fire its webhook (Agent's or Call's own), shared by every provider's stream handler."""
+    from app.services import call_analytics_service
+    from datetime import datetime
+    
     db_call = call_service.get_call(db, call_id=call_id)
     if not db_call:
         return
+    
+    # Calculate call duration
+    if db_call.start_time and not db_call.duration_seconds:
+        duration = (datetime.now() - db_call.start_time.replace(tzinfo=None)).total_seconds()
+        db_call.duration_seconds = int(duration)
+    
+    # Read conversation history from database (persisted during the call)
+    conversation_history = db_call.conversation_history or []
+    
+    # Generate post-call analytics using Sarvam AI
+    analytics = {}
+    if conversation_history:
+        try:
+            agent_language = "en-IN"  # Default
+            if db_call.agent:
+                agent_language = getattr(db_call.agent, "language", "en-IN")
+            
+            analytics = call_analytics_service.generate_call_analytics(
+                conversation_history=conversation_history,
+                agent_language=agent_language,
+            )
+            
+            # Save analytics to database
+            db_call.transcript = analytics.get("transcript")
+            db_call.summary = analytics.get("summary")
+            db_call.sentiment = analytics.get("sentiment")
+            
+            logger.info(f"Call {call_id} analytics generated: {len(analytics.get('transcript', ''))} char transcript, {analytics.get('sentiment')} sentiment")
+        except Exception as e:
+            logger.error(f"Failed to generate analytics for call {call_id}: {e}")
+    
+    # Resolve webhook URL
     webhook_url = getattr(db_call, 'webhook_url', None)
     if not webhook_url and db_call.agent_id:
         try:
@@ -370,14 +436,18 @@ async def _finalize_call(db: Session, call_id: int):
             pass
 
     db_call.status = "completed"
+    db_call.end_time = datetime.now()
     db.commit()
 
     if webhook_url:
         payload = {
             "call_id": call_id,
             "status": "completed",
-            "summary": "This is a placeholder summary for the conversation.",
-            "transcript": "Full conversation transcript would be assembled here."
+            "duration_seconds": db_call.duration_seconds,
+            "summary": analytics.get("summary") or "No summary available",
+            "transcript": analytics.get("transcript") or "No transcript available",
+            "sentiment": analytics.get("sentiment"),
+            "talk_time": analytics.get("talk_time", {}),
         }
         try:
             asyncio.create_task(httpx.AsyncClient().post(webhook_url, json=payload, timeout=10.0))

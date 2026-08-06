@@ -1,6 +1,6 @@
 import React, { useEffect, useState, useMemo } from 'react';
 import client from '../api/client';
-import { Phone, Clock, CheckCircle, XCircle, Loader, Search, PhoneCall } from 'lucide-react';
+import { Phone, Clock, CheckCircle, XCircle, Loader, Search, PhoneCall, ChevronDown, ChevronRight, MessageSquare, BarChart3, Timer, X } from 'lucide-react';
 import Badge from '../components/ui/Badge';
 import EmptyState from '../components/ui/EmptyState';
 
@@ -18,6 +18,8 @@ const CallHistory = () => {
     const [loading, setLoading] = useState(true);
     const [search, setSearch] = useState('');
     const [statusFilter, setStatusFilter] = useState('all');
+    const [selectedCall, setSelectedCall] = useState(null);
+    const [showDetails, setShowDetails] = useState(false);
 
     useEffect(() => {
         fetchCalls();
@@ -57,6 +59,38 @@ const CallHistory = () => {
     const formatDate = (dateString) => {
         if (!dateString) return '—';
         return new Date(dateString).toLocaleString();
+    };
+
+    const formatDuration = (seconds) => {
+        if (!seconds) return '—';
+        const mins = Math.floor(seconds / 60);
+        const secs = seconds % 60;
+        return `${mins}m ${secs}s`;
+    };
+
+    const getSentimentColor = (sentiment) => {
+        const colors = {
+            positive: 'text-green-600 bg-green-100 dark:text-green-400 dark:bg-green-900/30',
+            negative: 'text-red-600 bg-red-100 dark:text-red-400 dark:bg-red-900/30',
+            neutral: 'text-gray-600 bg-gray-100 dark:text-gray-400 dark:bg-gray-800',
+        };
+        return colors[sentiment] || colors.neutral;
+    };
+
+    const viewCallDetails = async (callId) => {
+        try {
+            // Fetch fresh call details to get the latest analytics
+            const response = await client.get(`/calls/${callId}`);
+            setSelectedCall(response.data);
+            setShowDetails(true);
+        } catch (error) {
+            console.error('Failed to fetch call details:', error);
+        }
+    };
+
+    const closeDetails = () => {
+        setShowDetails(false);
+        setSelectedCall(null);
     };
 
     return (
@@ -139,7 +173,11 @@ const CallHistory = () => {
                                 </tr>
                             ) : (
                                 filteredCalls.map((call) => (
-                                    <tr key={call.id} className="hover:bg-accent/50 transition-colors">
+                                    <tr
+                                        key={call.id}
+                                        onClick={() => viewCallDetails(call.id)}
+                                        className="hover:bg-accent/50 transition-colors cursor-pointer"
+                                    >
                                         <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
                                             #{call.id}
                                         </td>
@@ -165,6 +203,135 @@ const CallHistory = () => {
                     </table>
                 </div>
             </div>
+
+            {/* Call Details Modal */}
+            {showDetails && selectedCall && (
+                <div
+                    className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm"
+                    onClick={closeDetails}
+                >
+                    <div
+                        className="bg-card rounded-xl border border-border shadow-2xl w-full max-w-4xl max-h-[90vh] overflow-hidden flex flex-col"
+                        onClick={(e) => e.stopPropagation()}
+                    >
+                        {/* Header */}
+                        <div className="flex items-center justify-between px-6 py-4 border-b border-border">
+                            <div>
+                                <h2 className="text-xl font-semibold">Call #{selectedCall.id}</h2>
+                                <p className="text-sm text-muted-foreground mt-1">
+                                    {selectedCall.user_phone} • Agent #{selectedCall.agent_id}
+                                </p>
+                            </div>
+                            <button
+                                onClick={closeDetails}
+                                className="p-2 rounded-md hover:bg-accent transition-colors"
+                            >
+                                <X className="w-5 h-5" />
+                            </button>
+                        </div>
+
+                        {/* Content */}
+                        <div className="flex-1 overflow-y-auto p-6 space-y-6">
+                            {/* Metrics */}
+                            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                                <div className="bg-accent/50 rounded-lg p-4">
+                                    <div className="flex items-center gap-2 text-muted-foreground text-sm mb-1">
+                                        <Timer className="w-4 h-4" />
+                                        <span>Duration</span>
+                                    </div>
+                                    <p className="text-2xl font-semibold">
+                                        {formatDuration(selectedCall.duration_seconds)}
+                                    </p>
+                                </div>
+                                <div className="bg-accent/50 rounded-lg p-4">
+                                    <div className="flex items-center gap-2 text-muted-foreground text-sm mb-1">
+                                        <BarChart3 className="w-4 h-4" />
+                                        <span>Sentiment</span>
+                                    </div>
+                                    {selectedCall.sentiment ? (
+                                        <span className={`inline-flex items-center px-3 py-1 rounded-full text-sm font-medium capitalize ${getSentimentColor(selectedCall.sentiment)}`}>
+                                            {selectedCall.sentiment}
+                                        </span>
+                                    ) : (
+                                        <p className="text-muted-foreground text-sm">Not analyzed yet</p>
+                                    )}
+                                </div>
+                                <div className="bg-accent/50 rounded-lg p-4">
+                                    <div className="flex items-center gap-2 text-muted-foreground text-sm mb-1">
+                                        <Clock className="w-4 h-4" />
+                                        <span>Status</span>
+                                    </div>
+                                    <div className="mt-1">{getStatusBadge(selectedCall.status)}</div>
+                                </div>
+                            </div>
+
+                            {/* Summary */}
+                            {selectedCall.summary && (
+                                <div className="bg-accent/30 rounded-lg p-5 border border-border/50">
+                                    <h3 className="font-semibold text-sm text-muted-foreground uppercase tracking-wide mb-3 flex items-center gap-2">
+                                        <MessageSquare className="w-4 h-4" />
+                                        AI Summary
+                                    </h3>
+                                    <p className="text-sm leading-relaxed">{selectedCall.summary}</p>
+                                </div>
+                            )}
+
+                            {/* Transcript */}
+                            {selectedCall.transcript && (
+                                <div>
+                                    <h3 className="font-semibold text-sm text-muted-foreground uppercase tracking-wide mb-3">
+                                        Full Transcript
+                                    </h3>
+                                    <div className="bg-accent/30 rounded-lg p-5 border border-border/50 space-y-3 max-h-96 overflow-y-auto">
+                                        {selectedCall.transcript.split('\n').map((line, idx) => {
+                                            const [speaker, ...textParts] = line.split(':');
+                                            const text = textParts.join(':').trim();
+                                            if (!text) return null;
+                                            const isUser = speaker.includes('User');
+                                            return (
+                                                <div key={idx} className={`flex gap-3 ${isUser ? '' : 'flex-row-reverse text-right'}`}>
+                                                    <div className={`flex-1 rounded-lg px-4 py-2 ${isUser ? 'bg-blue-500/20' : 'bg-purple-500/20'}`}>
+                                                        <p className="font-medium text-xs text-muted-foreground mb-1">
+                                                            {speaker}
+                                                        </p>
+                                                        <p className="text-sm">{text}</p>
+                                                    </div>
+                                                </div>
+                                            );
+                                        })}
+                                    </div>
+                                </div>
+                            )}
+
+                            {/* No Analytics Yet */}
+                            {!selectedCall.summary && !selectedCall.transcript && (
+                                <div className="text-center py-12">
+                                    <MessageSquare className="w-12 h-12 mx-auto text-muted-foreground mb-3" />
+                                    <p className="text-muted-foreground">
+                                        {selectedCall.status === 'completed'
+                                            ? 'Analytics are being generated. Please refresh in a moment.'
+                                            : 'Analytics will be available after the call completes.'}
+                                    </p>
+                                </div>
+                            )}
+
+                            {/* Timestamps */}
+                            <div className="grid grid-cols-2 gap-4 pt-4 border-t border-border">
+                                <div>
+                                    <p className="text-xs text-muted-foreground">Start Time</p>
+                                    <p className="text-sm font-medium">{formatDate(selectedCall.start_time)}</p>
+                                </div>
+                                {selectedCall.end_time && (
+                                    <div>
+                                        <p className="text-xs text-muted-foreground">End Time</p>
+                                        <p className="text-sm font-medium">{formatDate(selectedCall.end_time)}</p>
+                                    </div>
+                                )}
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            )}
         </div>
     );
 };

@@ -24,3 +24,7 @@ requests
 websockets
 httpx
 sarvamai
+pyotp
+authlib
+itsdangerous
+emails

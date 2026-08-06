@@ -1,6 +1,6 @@
 import React from 'react';
 import { Link, useLocation } from 'react-router-dom';
-import { LayoutDashboard, Users, Phone, Workflow, BarChart3, KeyRound, LogOut } from 'lucide-react';
+import { LayoutDashboard, Users, Phone, Workflow, BarChart3, KeyRound, DollarSign, LogOut } from 'lucide-react';
 
 import ThemeToggle from './ThemeToggle';
 import PageTransition from './ui/PageTransition';
@@ -14,11 +14,12 @@ const Layout = ({ children }) => {
     const location = useLocation();
 
     const navItems = [
-        { icon: LayoutDashboard, label: 'Dashboard', path: '/' },
+        { icon: LayoutDashboard, label: 'Dashboard', path: '/dashboard' },
         { icon: Users, label: 'Agents', path: '/agents' },
         { icon: Phone, label: 'Call History', path: '/calls' },
         { icon: Workflow, label: 'Workflows', path: '/workflows' },
         { icon: BarChart3, label: 'Analytics', path: '/analytics' },
+        { icon: DollarSign, label: 'Usage & Costs', path: '/usage' },
         { icon: KeyRound, label: 'Integrations', path: '/integrations' },
     ];
 

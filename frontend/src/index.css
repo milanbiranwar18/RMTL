@@ -114,3 +114,20 @@
   stroke: hsl(var(--muted-foreground) / 65%);
   stroke-width: 1.5;
 }
+
+/* Enhanced edge styles for different connection types */
+.workflow-canvas .react-flow__edge.react-flow__edge-smoothstep .react-flow__edge-path {
+  stroke: hsl(var(--muted-foreground) / 70%);
+  stroke-width: 2;
+}
+
+.workflow-canvas .react-flow__edge.react-flow__edge-straight .react-flow__edge-path {
+  stroke: hsl(var(--muted-foreground) / 60%);
+  stroke-width: 1.5;
+}
+
+.workflow-canvas .react-flow__edge.selected .react-flow__edge-path,
+.workflow-canvas .react-flow__edge:hover .react-flow__edge-path {
+  stroke: hsl(var(--primary) / 85%);
+  stroke-width: 2.5;
+}
